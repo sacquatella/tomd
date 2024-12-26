@@ -1,0 +1,5 @@
+[
+  {"site_url":"https://en.wikipedia.org/wiki/Wikipedia", "description":"Home page Wikipedia","title":"","tags":["tag1","tag2"]},
+  {"site_url":"https://www.w3.org/International/questions/qa-html-language-declarations", "description":"w3c language","title":""},
+  {"site_url":"https://go.dev/", "description":"Golang Home ","title":"Get Go", "authors": ["author1","author2"]}
+]

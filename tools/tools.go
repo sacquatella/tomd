@@ -1,0 +1,239 @@
+// Copyright © 2024 Acquatella Stephan
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package tools
+
+import (
+	"encoding/json"
+	"fmt"
+	md "github.com/JohannesKaufmann/html-to-markdown"
+	"github.com/JohannesKaufmann/html-to-markdown/plugin"
+	"github.com/PuerkitoBio/goquery"
+	"github.com/apcera/termtables"
+	log "github.com/sirupsen/logrus"
+	"io"
+	"net/http"
+	"os"
+	"regexp"
+	"strings"
+	"time"
+)
+
+// DisplayError display error on screen
+func CheckError(err error) {
+	if err != nil {
+		fmt.Println("An issue occur during page processing: ", err.Error())
+		os.Exit(1)
+	}
+}
+
+// BuildMetadata build metadata for a page as markdown header
+func BuildMetadata(content *goquery.Document, url string, prefix string, complement Metadata) (string, Metadata) {
+
+	var metaData Metadata
+	// set title
+	defaultTitle := strings.ReplaceAll(content.Find("title").Text(), "/", "-")
+	// override title if complement.title is not empty
+	if complement.Title != "" {
+		// remove "/" values in title string
+		metaData.Title = complement.Title
+	} else {
+		metaData.Title = defaultTitle
+	}
+	// set description base on <meta name="description" content="xxx">
+	defaultDescription := content.Find("meta[name='description']").AttrOr("content", "")
+	// override title if complement.title is not empty
+	if complement.Description != "" {
+		// remove "/" values in title string
+		metaData.Description = complement.Description
+	} else {
+		metaData.Description = defaultDescription
+	}
+
+	// Build doc_id as TITLE in UPPERCASE WITHOUT SPACE
+	// set doc_id as prefix + "_" + content.ID
+	doc_id := strings.ReplaceAll(strings.ToUpper(metaData.Title), " ", "")
+	metaData.Doc_id = strings.ToUpper(prefix + "_" + doc_id)
+	//
+	// override description if complement.description is not empty
+	if complement.Description != "" {
+		metaData.Description = complement.Description
+	} else {
+		metaData.Description = defaultTitle
+	}
+	// add new tags if complement.tags is not empty
+	if len(complement.Tags) > 0 {
+		for _, tag := range complement.Tags {
+			metaData.Tags = append(metaData.Tags, tag)
+		}
+	}
+	metaData.Tags = append(metaData.Tags, "web")
+	// set site_url
+	metaData.Site_url = url
+	// add new authors if complement.authors is not empty
+	if len(complement.Authors) > 0 {
+		for _, author := range complement.Authors {
+			metaData.Authors = append(metaData.Authors, author)
+		}
+	}
+	webPageAuthor := content.Find("meta[name='author']").AttrOr("content", "")
+	if webPageAuthor != "" {
+		metaData.Authors = append(metaData.Authors, webPageAuthor)
+	}
+	// date should be in ISO 8601 format without seconds
+	metaData.Creation_date = content.Find("meta[name='date']").AttrOr("content", time.Now().Format("2006-01-02T15:04:05Z07:00"))
+	metaData.Last_update_date = content.Find("meta[name='update-date']").AttrOr("content", time.Now().Format("2006-01-02T15:04:05Z07:00"))
+
+	metaData.Visibility = "Interne"
+
+	// build metadata tag list
+	var taglist string
+	for _, tag := range metaData.Tags {
+		taglist += "\n" + "- " + tag
+	}
+	// build authors list
+	var authorslist string
+	for _, author := range metaData.Authors {
+		authorslist += "\n" + "- " + author
+	}
+
+	// Add metadata header to markdown with title , doc_id,description , tags, site_url, authors, creation_date, last_update
+
+	pageMetadata := fmt.Sprintf("---\ntitle: %s\ndoc_id: %s\ndescription: %s\ntags: %s\nsite_url: %s\nauthors: %s\ncreation_date: %s\nlast_update_date: %s\nvisibility: %s\n---\n",
+		metaData.Title,
+		metaData.Doc_id,
+		metaData.Description,
+		taglist,
+		metaData.Site_url,
+		authorslist,
+		metaData.Creation_date,    // date should be in ISO 8601 format without seconds
+		metaData.Last_update_date, // date should be in ISO 8601 format without seconds
+		metaData.Visibility)
+	return pageMetadata, metaData
+}
+
+// GetImgList get all images from a web page and return a list of image url
+func GetImgList(content *goquery.Document) ([]string, error) {
+
+	var imgList []string
+	content.Find("img").Each(func(i int, s *goquery.Selection) {
+		imgUrl, _ := s.Attr("src")
+		imgList = append(imgList, imgUrl)
+	})
+	return imgList, nil
+}
+
+// GetPage get a web page by it url and return a Page struct
+func GetPage(url string, customerId string, exportDir string, complements Metadata, domain string, ia bool) (Page, error) {
+
+	var grReader io.Reader
+	var err error
+
+	if strings.HasPrefix(url, "http") {
+		webpageReader, err := http.Get(url)
+		CheckError(err)
+		grReader = io.Reader(webpageReader.Body)
+		defer webpageReader.Body.Close()
+	} else {
+		webpageReader, err := os.Open(url)
+		CheckError(err)
+		grReader = io.Reader(webpageReader)
+		defer webpageReader.Close()
+	}
+
+	// Get web page content
+	doc, err := goquery.NewDocumentFromReader(grReader)
+	CheckError(err)
+	content := doc.Find("body")
+
+	if domain == "" && regexp.MustCompile(`(?i)^http`).MatchString(url) {
+		domain = md.DomainFromURL(url)
+	}
+
+	//fmt.Printf("ID: %s\n", content.ID)
+
+	converter := md.NewConverter(domain, true, nil)
+	converter.Use(plugin.ConfluenceCodeBlock())
+	converter.Use(plugin.ConfluenceAttachments())
+	converter.Use(plugin.GitHubFlavored())
+	markdown := converter.Convert(content)
+	if err != nil {
+		log.Fatal(err)
+		return Page{}, err
+	}
+
+	// Rewrite Set content.Title without space and un lowercase
+	title := strings.ReplaceAll(doc.Find("title").Text(), " ", "-")
+
+	//title := strings.ReplaceAll(content.Find("title"), " ", "-")
+	title = strings.ReplaceAll(title, "/", "-")
+	title = strings.ReplaceAll(title, "'", "-")
+	title = strings.ToLower(title) + ".md"
+
+	// Add metadata header to markdown with title , doc_id,description , tags, site_url, authors, creation_date, last_update
+	metadata, metaDatas := BuildMetadata(doc, url, customerId, complements)
+	// Add metadata header to markdown
+	markdown = metadata + markdown
+
+	// If imgDesc is not empty, add image description to markdown
+	if ia {
+		// Get all images from web page
+		imgList, err := GetImgList(doc)
+		if err != nil {
+			log.Fatal(err)
+			return Page{}, err
+		}
+		markdown = markdown + imageDescriptionAsMd(imgList, domain)
+	}
+
+	exportedFile := exportDir + "/" + customerId + "-" + title
+	// save markdown to file
+	err = os.WriteFile(exportedFile, []byte(markdown), 0644)
+	if err != nil {
+		log.Fatal(err)
+		return Page{}, err
+	}
+	return Page{PageId: metaDatas.Doc_id, Url: metaDatas.Site_url, MdFile: exportedFile}, nil
+}
+
+// ReadPages read pages list from json file and return a list of Metadata
+func ReadPages(filename string) ([]Metadata, error) {
+	// read json file with following format
+	//  [{"url":"https://en.wikipedia.org/wiki/Wikipedia", "description":"Home page Wikipedia","title":"","tags":["tag1","tag2"]},]
+	// return a list of Metadata
+	var pages []Metadata
+	// read json file
+	file, err := os.Open(filename)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	// decode json file
+	err = json.NewDecoder(file).Decode(&pages)
+	if err != nil {
+		return nil, err
+	}
+	return pages, nil
+}
+
+// DisplayOnScreen display pages on screen as text table
+func DisplayOnScreen(exportedPages []Page) {
+	table := termtables.CreateTable()
+	table.AddHeaders("Page ID", "Url", "Markdown files")
+	for _, page := range exportedPages {
+		table.AddRow(page.PageId, page.Url, page.MdFile)
+	}
+	fmt.Println(table.Render())
+}

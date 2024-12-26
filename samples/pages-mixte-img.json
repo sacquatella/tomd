@@ -1,0 +1,4 @@
+[
+  {"site_url":"https://go.dev/", "description":"Golang Home ","title":"Get Go", "authors": ["author1","author2"]},
+  {"site_url":"./samples/test.html", "description":"","title":"","tags":["tag1","tag2"]}
+]

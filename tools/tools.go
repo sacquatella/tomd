@@ -194,7 +194,7 @@ func GetPage(url string, customerId string, exportDir string, complements Metada
 			log.Fatal(err)
 			return Page{}, err
 		}
-		markdown = markdown + imageDescriptionAsMd(imgList, domain)
+		markdown = markdown + "\n" + imageDescriptionAsMd(imgList, domain)
 	}
 
 	exportedFile := exportDir + "/" + customerId + "-" + title

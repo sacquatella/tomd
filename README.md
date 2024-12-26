@@ -47,3 +47,9 @@ Flags:
 Use "tomd [command] --help" for more information about a command.
 ```
 
+## Build
+
+```shell
+$ go mod tidy
+$ go build
+```

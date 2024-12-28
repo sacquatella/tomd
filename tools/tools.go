@@ -25,14 +25,19 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"time"
 )
 
-// DisplayError display error on screen
+// CheckError display error on screen
 func CheckError(err error) {
+	// get caller function name
+	pc, _, _, _ := runtime.Caller(1)
 	if err != nil {
+		fmt.Println("From ", runtime.FuncForPC(pc).Name())
 		fmt.Println("An issue occur during page processing: ", err.Error())
 		os.Exit(1)
 	}
@@ -124,13 +129,17 @@ func BuildMetadata(content *goquery.Document, url string, prefix string, complem
 }
 
 // GetImgList get all images from a web page and return a list of image url
-func GetImgList(content *goquery.Document) ([]string, error) {
+func GetImgList(content *goquery.Document, ispath string) ([]string, error) {
 
 	var imgList []string
 	content.Find("img").Each(func(i int, s *goquery.Selection) {
 		imgUrl, _ := s.Attr("src")
+		if ispath != "" {
+			imgUrl = ispath + "/" + imgUrl
+		}
 		imgList = append(imgList, imgUrl)
 	})
+	log.Info("Images list: ", imgList)
 	return imgList, nil
 }
 
@@ -139,7 +148,9 @@ func GetPage(url string, customerId string, exportDir string, complements Metada
 
 	var grReader io.Reader
 	var err error
+	var isPath string
 
+	// Get web page content from url or local file
 	if strings.HasPrefix(url, "http") {
 		webpageReader, err := http.Get(url)
 		CheckError(err)
@@ -147,6 +158,7 @@ func GetPage(url string, customerId string, exportDir string, complements Metada
 		defer webpageReader.Body.Close()
 	} else {
 		webpageReader, err := os.Open(url)
+		isPath = filepath.Dir(url)
 		CheckError(err)
 		grReader = io.Reader(webpageReader)
 		defer webpageReader.Close()
@@ -189,7 +201,7 @@ func GetPage(url string, customerId string, exportDir string, complements Metada
 	// If imgDesc is not empty, add image description to markdown
 	if ia {
 		// Get all images from web page
-		imgList, err := GetImgList(doc)
+		imgList, err := GetImgList(doc, isPath)
 		if err != nil {
 			log.Fatal(err)
 			return Page{}, err

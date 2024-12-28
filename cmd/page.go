@@ -16,7 +16,6 @@ package cmd
 
 import (
 	"github.com/sacquatella/tomd/tools"
-	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
 
@@ -33,11 +32,6 @@ func init() {
 	rootCmd.AddCommand(pageCmd)
 	pageCmd.PersistentFlags().StringVarP(&Url, "url", "u", "", "Page URL")
 	pageCmd.PersistentFlags().StringVarP(&CustomerId, "cid", "c", "web", "Customer ID code ")
-
-	if Verbose {
-		log.SetLevel(log.DebugLevel)
-	}
-	initLog(Verbose)
 }
 
 // getWebPage get a web page by its id and generate a markdown page with its metadatas

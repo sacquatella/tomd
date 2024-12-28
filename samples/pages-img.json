@@ -1,0 +1,5 @@
+[
+  {"site_url":"https://www.w3.org/International/questions/qa-html-language-declarations", "description":"w3c language","title":""},
+  {"site_url":"https://go.dev/", "description":"Golang Home ","title":"Get Go", "authors": ["author1","author2"]},
+  {"site_url":"https://squidfunk.github.io/mkdocs-material/setup/", "description":"mkdoc material setup ","title":"", "authors": ["author1","author2"]}
+]

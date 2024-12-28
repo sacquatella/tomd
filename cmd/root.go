@@ -16,7 +16,8 @@ package cmd
 
 import (
 	"fmt"
-	log "github.com/sirupsen/logrus"
+	"github.com/sacquatella/tomd/tools"
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"os"
 )
@@ -33,6 +34,8 @@ var rootCmd = &cobra.Command{
 	Long:  `Export web pages to markdown files, create metadata header and optionally use llm to describe image in markdown file`,
 }
 
+var log *logrus.Logger
+
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
@@ -43,29 +46,9 @@ func Execute() {
 }
 
 func init() {
-	Verbose = false
+	//Verbose = false
 	rootCmd.PersistentFlags().BoolVarP(&Verbose, "verbose", "v", false, "write debug logs in log-tomd.log file")
 	rootCmd.PersistentFlags().StringVarP(&ExportDir, "dir", "d", ".", "Export page(s) folder, default is current folder")
 	rootCmd.PersistentFlags().BoolVarP(&ImgDesc, "ia", "i", false, "Use IA for image description")
-}
-
-func check(e error) {
-	if e != nil {
-		panic(e)
-	}
-}
-
-func initLog(verbose bool) {
-	if verbose {
-		// You could set this to any `io.Writer` such as a file
-		file, err := os.OpenFile("log-tomd.log", os.O_CREATE|os.O_WRONLY, 0666)
-		log.SetLevel(log.DebugLevel)
-		if err == nil {
-			log.SetOutput(file)
-		} else {
-			log.Info("Failed to log to file, using default stderr")
-		}
-	} else {
-		log.SetLevel(log.InfoLevel)
-	}
+	log = tools.InitLog(Verbose)
 }

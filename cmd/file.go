@@ -16,7 +16,6 @@ package cmd
 
 import (
 	"github.com/sacquatella/tomd/tools"
-	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
 
@@ -33,11 +32,7 @@ func init() {
 	rootCmd.AddCommand(fileCmd)
 	fileCmd.PersistentFlags().StringVarP(&PagesFile, "file", "f", "", "pages list as json file")
 	fileCmd.PersistentFlags().StringVarP(&CustomerId, "cid", "c", "web", "Customer ID code ")
-
-	if Verbose {
-		log.SetLevel(log.DebugLevel)
-	}
-	initLog(Verbose)
+	log = tools.InitLog(Verbose)
 }
 
 // getConfluencePages get a list of confluence pages by their id and generate a markdown page with their metadatas
@@ -46,6 +41,8 @@ func getWebPages(cmd *cobra.Command, args []string) {
 	// Read json file
 	pages, err := tools.ReadPages(PagesFile)
 	tools.CheckError(err)
+
+	log.Info("Pages list read from file : ", PagesFile)
 
 	// Display on screen
 	var pagelist []tools.Page

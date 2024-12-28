@@ -17,6 +17,7 @@ package tools
 import (
 	"context"
 	"github.com/ollama/ollama/api"
+	log "github.com/sirupsen/logrus"
 	"io"
 	"net/http"
 	"os"
@@ -24,41 +25,37 @@ import (
 )
 
 // DescribeImg describe an image with Ollama API
-func DescribeImg(img string) string {
+func DescribeImg(img string) (string, error) {
 
 	var err error
 	var imgData []byte
 	if strings.HasPrefix(img, "http") {
 		resp, err := http.Get(img)
-		CheckError(err)
+		if err != nil {
+			log.Infof("Error %s when getting img %s ", err, img)
+			return "", err
+		}
 		// get img data
 		imgData, err = io.ReadAll(resp.Body)
 		defer resp.Body.Close()
 	} else {
 		imgData, err = os.ReadFile(img)
-		CheckError(err)
+		if err != nil {
+			log.Infof("Error %s when reading img %s ", err, img)
+			return "", err
+		}
 	}
-
-	//imgData, err := os.ReadFile(img)
-	//CheckError(err)
 
 	client, err := api.ClientFromEnvironment()
 	CheckError(err)
 
 	req := &api.GenerateRequest{
-		Model:  "llava",
+		Model:  "llava:7b",
 		Prompt: "describe this image",
 		Images: []api.ImageData{imgData},
 	}
 
 	ctx := context.Background()
-	/*respFunc := func(resp api.GenerateResponse) error {
-		// In streaming mode, responses are partial so we call fmt.Print (and not
-		// Println) in order to avoid spurious newlines being introduced. The
-		// model will insert its own newlines if it wants.
-		fmt.Print(resp.Response)
-		return nil
-	}*/
 
 	var llmResponse string
 	respFunc := func(resp api.GenerateResponse) error {
@@ -70,12 +67,15 @@ func DescribeImg(img string) string {
 	}
 
 	err = client.Generate(ctx, req, respFunc)
-	CheckError(err)
+	if err != nil {
+		log.Infof("Error %s when when calling llm ", err)
+		return "", err
+	}
 
-	//fmt.Println()
-	return llmResponse
+	return llmResponse, nil
 }
 
+// imageDescriptionAsMd add image description to markdown
 func imageDescriptionAsMd(imgList []string, domain string) string {
 	// Add image description to markdown
 	var markdown string
@@ -84,10 +84,14 @@ func imageDescriptionAsMd(imgList []string, domain string) string {
 			continue
 		}
 		if domain != "" {
-			img = "https://" + domain + img
+			img = "https://" + domain + "/" + img
 		}
-		mddesc := DescribeImg(img)
-		markdown += "[" + img + "]:" + mddesc + "\n"
+		log.Info("compute Image: ", img)
+		mdDesc, err := DescribeImg(img)
+		if err != nil {
+			mdDesc = ""
+		}
+		markdown += "\n[" + img + "]: " + mdDesc + "\n"
 	}
 	return markdown
 }

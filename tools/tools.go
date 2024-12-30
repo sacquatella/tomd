@@ -15,6 +15,7 @@
 package tools
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	md "github.com/JohannesKaufmann/html-to-markdown"
@@ -31,6 +32,8 @@ import (
 	"strings"
 	"time"
 )
+
+var Insecure bool
 
 // CheckError display error on screen
 func CheckError(err error) {
@@ -152,6 +155,10 @@ func GetPage(url string, customerId string, exportDir string, complements Metada
 
 	// Get web page content from url or local file
 	if strings.HasPrefix(url, "http") {
+		// Check is option -k is set, and if yes, don't check certificate
+		if Insecure {
+			http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+		}
 		webpageReader, err := http.Get(url)
 		CheckError(err)
 		grReader = io.Reader(webpageReader.Body)

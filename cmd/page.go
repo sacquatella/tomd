@@ -30,8 +30,9 @@ var pageCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(pageCmd)
-	pageCmd.PersistentFlags().StringVarP(&Url, "url", "u", "", "Page URL")
+	pageCmd.PersistentFlags().StringVarP(&Url, "url", "u", "", "Page URL or folder")
 	pageCmd.PersistentFlags().StringVarP(&CustomerId, "cid", "c", "web", "Customer ID code ")
+	pageCmd.PersistentFlags().BoolVarP(&tools.Insecure, "unsecure", "k", false, "Allow unsecure certificate")
 }
 
 // getWebPage get a web page by its id and generate a markdown page with its metadatas

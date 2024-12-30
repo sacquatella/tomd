@@ -32,6 +32,7 @@ func init() {
 	rootCmd.AddCommand(fileCmd)
 	fileCmd.PersistentFlags().StringVarP(&PagesFile, "file", "f", "", "pages list as json file")
 	fileCmd.PersistentFlags().StringVarP(&CustomerId, "cid", "c", "web", "Customer ID code ")
+	fileCmd.PersistentFlags().BoolVarP(&tools.Insecure, "unsecure", "k", false, "Allow unsecure certificate")
 	log = tools.InitLog(Verbose)
 }
 

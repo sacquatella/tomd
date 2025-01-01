@@ -18,7 +18,7 @@ import "testing"
 
 // TestDescribeImg_Bacic test the DescribeImg function (ollama shoud run localy to pass this test)
 func TestDescribeImg_Bacic(t *testing.T) {
-	result := DescribeImg("../samples/valid_img.jpeg")
+	result, _ := DescribeImg("../samples/valid_img.jpeg")
 	println(result)
 	if result == "" {
 		t.Errorf("expected description, got %s", result)
@@ -30,7 +30,7 @@ func TestDescribeImg_List(t *testing.T) {
 
 	imgList := []string{"../samples/valid_img.jpeg", "../samples/valid_img.jpeg"}
 	for _, img := range imgList {
-		result := DescribeImg(img)
+		result, _ := DescribeImg(img)
 		println(result)
 		if result == "" {
 			t.Errorf("expected description, got %s", result)

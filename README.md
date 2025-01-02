@@ -42,6 +42,8 @@ Available Commands:
   file        Get a list of web pages as markdown files
   help        Help about any command
   page        Get a web page as a markdown file
+  pdf         Get PDF text content as a markdown file
+  version     Provide tomd version and build number
 
 Flags:
   -d, --dir string   Export page(s) folder, default is current folder (default ".")
@@ -55,7 +57,7 @@ Use "tomd [command] --help" for more information about a command.
 If `-i` option is use, `ollama` and llm `llava:7b` are used to describe images at the end of markdown file. 
 So do not forget install [ollama](https://ollama.com) and to pull `llava:7b` with `ollama pull llava:7b` before using this option.
 
-```shell
+
 
 ## Build
 

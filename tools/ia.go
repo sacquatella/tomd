@@ -25,10 +25,25 @@ import (
 )
 
 // DescribeImg describe an image with Ollama API
-func DescribeImg(img string) (string, error) {
+func DescribeImg(img string, lang string) (string, error) {
 
 	var err error
 	var imgData []byte
+	var prompt string
+
+	switch lang {
+	case "French":
+		prompt = "décrire cette image"
+	case "German":
+		prompt = "beschreibe dieses Bild"
+	case "Italian":
+		prompt = "descrivi questa immagine"
+	case "English":
+		prompt = "describe this image"
+	default:
+		prompt = "describe this image"
+	}
+
 	if strings.HasPrefix(img, "http") {
 		resp, err := http.Get(img)
 		if err != nil {
@@ -51,7 +66,7 @@ func DescribeImg(img string) (string, error) {
 
 	req := &api.GenerateRequest{
 		Model:  "llava:7b",
-		Prompt: "describe this image",
+		Prompt: prompt,
 		Images: []api.ImageData{imgData},
 	}
 
@@ -76,7 +91,7 @@ func DescribeImg(img string) (string, error) {
 }
 
 // imageDescriptionAsMd add image description to markdown
-func imageDescriptionAsMd(imgList []string) string {
+func imageDescriptionAsMd(imgList []string, lang string) string {
 	// Add image description to markdown
 	var markdown string
 	for _, img := range imgList {
@@ -84,7 +99,7 @@ func imageDescriptionAsMd(imgList []string) string {
 			continue
 		}
 		log.Info("compute Image: ", img)
-		mdDesc, err := DescribeImg(img)
+		mdDesc, err := DescribeImg(img, lang)
 		if err != nil {
 			mdDesc = ""
 		}

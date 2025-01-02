@@ -5,6 +5,7 @@ go 1.23.4
 require (
 	github.com/JohannesKaufmann/html-to-markdown v1.6.0
 	github.com/PuerkitoBio/goquery v1.10.0
+	github.com/abadojack/whatlanggo v1.0.1
 	github.com/apcera/termtables v0.0.0-20170405184538-bcbc5dc54055
 	github.com/ollama/ollama v0.5.4
 	github.com/rsc/pdf v0.1.1

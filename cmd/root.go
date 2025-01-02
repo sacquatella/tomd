@@ -17,7 +17,6 @@ package cmd
 import (
 	"fmt"
 	"github.com/sacquatella/tomd/tools"
-	//	logger "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"os"
 )

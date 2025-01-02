@@ -21,6 +21,7 @@ import (
 	md "github.com/JohannesKaufmann/html-to-markdown"
 	"github.com/JohannesKaufmann/html-to-markdown/plugin"
 	"github.com/PuerkitoBio/goquery"
+	"github.com/abadojack/whatlanggo"
 	"github.com/apcera/termtables"
 	log "github.com/sirupsen/logrus"
 	"io"
@@ -217,6 +218,12 @@ func GetPage(url string, customerId string, exportDir string, complements Metada
 	// get url scheme
 	scheme := regexp.MustCompile(`(?i)^http`).FindString(url)
 
+	// identify language for markdown content
+	infol := whatlanggo.Detect(markdown)
+	lang := infol.Lang.String()
+
+	log.Infof("Language detected: %s at %f for %s", lang, infol.Confidence, url)
+
 	// If imgDesc is not empty, add image description to markdown
 	if ia {
 		// Get all images from web page
@@ -225,7 +232,7 @@ func GetPage(url string, customerId string, exportDir string, complements Metada
 			log.Fatal(err)
 			return Page{}, err
 		}
-		markdown = markdown + "\n" + imageDescriptionAsMd(imgList)
+		markdown = markdown + "\n" + imageDescriptionAsMd(imgList, lang)
 	}
 
 	exportedFile := exportDir + "/" + customerId + "-" + title

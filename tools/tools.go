@@ -132,14 +132,23 @@ func BuildMetadata(content *goquery.Document, url string, prefix string, complem
 }
 
 // GetImgList get all images from a web page and return a list of image url
-func GetImgList(content *goquery.Document, ispath string) ([]string, error) {
+func GetImgList(content *goquery.Document, ispath string, scheme string, domain string) ([]string, error) {
 
 	var imgList []string
 	content.Find("img").Each(func(i int, s *goquery.Selection) {
 		imgUrl, _ := s.Attr("src")
 		if ispath != "" {
 			imgUrl = ispath + "/" + imgUrl
+		} else {
+			if !strings.HasPrefix(imgUrl, "http") {
+				if strings.HasPrefix(imgUrl, "/") {
+					imgUrl = scheme + "://" + domain + imgUrl
+				} else {
+					imgUrl = scheme + "://" + domain + "/" + imgUrl
+				}
+			}
 		}
+
 		imgList = append(imgList, imgUrl)
 	})
 	log.Info("Images list: ", imgList)
@@ -205,15 +214,18 @@ func GetPage(url string, customerId string, exportDir string, complements Metada
 	// Add metadata header to markdown
 	markdown = metadata + markdown
 
+	// get url scheme
+	scheme := regexp.MustCompile(`(?i)^http`).FindString(url)
+
 	// If imgDesc is not empty, add image description to markdown
 	if ia {
 		// Get all images from web page
-		imgList, err := GetImgList(doc, isPath)
+		imgList, err := GetImgList(doc, isPath, scheme, domain)
 		if err != nil {
 			log.Fatal(err)
 			return Page{}, err
 		}
-		markdown = markdown + "\n" + imageDescriptionAsMd(imgList, domain)
+		markdown = markdown + "\n" + imageDescriptionAsMd(imgList)
 	}
 
 	exportedFile := exportDir + "/" + customerId + "-" + title

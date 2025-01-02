@@ -17,7 +17,7 @@ package cmd
 import (
 	"fmt"
 	"github.com/sacquatella/tomd/tools"
-	"github.com/sirupsen/logrus"
+	//	logger "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"os"
 )
@@ -34,7 +34,7 @@ var rootCmd = &cobra.Command{
 	Long:  `Export web pages to markdown files, create metadata header and optionally use llm to describe image in markdown file`,
 }
 
-var log *logrus.Logger
+//var log *logrus.Logger
 
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
@@ -47,8 +47,15 @@ func Execute() {
 
 func init() {
 	//Verbose = false
+	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+		if err := tools.InitLogger(Verbose); err != nil {
+			return err
+		}
+		return nil
+	}
+
 	rootCmd.PersistentFlags().BoolVarP(&Verbose, "verbose", "v", false, "write debug logs in log-tomd.log file")
 	rootCmd.PersistentFlags().StringVarP(&ExportDir, "dir", "d", ".", "Export page(s) folder, default is current folder")
 	rootCmd.PersistentFlags().BoolVarP(&ImgDesc, "ia", "i", false, "Use IA for image description")
-	log = tools.InitLog(Verbose)
+	//log = tools.InitLog(Verbose)
 }

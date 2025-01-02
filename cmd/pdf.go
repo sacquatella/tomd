@@ -20,6 +20,7 @@ import (
 )
 
 var Pdf string
+var CustomerIdPdf string
 
 var pdfCmd = &cobra.Command{
 	Use:   "pdf",
@@ -32,13 +33,13 @@ func init() {
 	rootCmd.AddCommand(pdfCmd)
 	pdfCmd.PersistentFlags().StringVarP(&Pdf, "pdf", "p", "", "Pdf file")
 	pdfCmd.PersistentFlags().StringVarP(&Url, "url", "u", "", "Page URL for metadata")
-	pdfCmd.PersistentFlags().StringVarP(&CustomerId, "cid", "c", "pdf", "Customer ID code ")
+	pdfCmd.PersistentFlags().StringVarP(&CustomerIdPdf, "cid", "c", "pdf", "Customer ID code ")
 }
 
 // getWebPage get a web page by its id and generate a markdown page with its metadatas
 func getPdfDocument(cmd *cobra.Command, args []string) {
 	var pages []tools.Page
-	datas, err := tools.GetPDF(Pdf, Url, CustomerId, ExportDir, tools.Metadata{})
+	datas, err := tools.GetPDF(Pdf, Url, CustomerIdPdf, ExportDir, tools.Metadata{})
 	tools.CheckError(err)
 	pages = append(pages, datas)
 	tools.DisplayOnScreen(pages)

@@ -24,6 +24,11 @@ with :
 ]
 ```
 
+Extract PDF text as markdown file
+```shell
+$ tomd pdf -f <pdf-file> -d <directory>
+```
+
 ## Options 
 
 ```shell

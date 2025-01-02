@@ -76,15 +76,12 @@ func DescribeImg(img string) (string, error) {
 }
 
 // imageDescriptionAsMd add image description to markdown
-func imageDescriptionAsMd(imgList []string, domain string) string {
+func imageDescriptionAsMd(imgList []string) string {
 	// Add image description to markdown
 	var markdown string
 	for _, img := range imgList {
 		if strings.HasSuffix(img, ".svg") || strings.HasSuffix(img, ".svg.png") {
 			continue
-		}
-		if domain != "" {
-			img = "https://" + domain + "/" + img
 		}
 		log.Info("compute Image: ", img)
 		mdDesc, err := DescribeImg(img)

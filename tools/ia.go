@@ -18,6 +18,7 @@ import (
 	"context"
 	"github.com/ollama/ollama/api"
 	log "github.com/sirupsen/logrus"
+	"github.com/spf13/viper"
 	"io"
 	"net/http"
 	"os"
@@ -27,13 +28,19 @@ import (
 // DescribeImg describe an image with Ollama API
 func DescribeImg(img string, lang string) (string, error) {
 
+	// override model if TOML_MODEL env variable is set
+	viper.SetDefault("Model", "llava:7b")
+	viper.SetEnvPrefix("tomd") // will be uppercased automatically
+	viper.BindEnv("Model")     // set env value with TOML_MODEL
+
 	var err error
 	var imgData []byte
 	var prompt string
 
 	switch lang {
 	case "French":
-		prompt = "décrire cette image"
+		//prompt = "décrire cette image"
+		prompt = "Peux-tu décrire l'image suivante qui contient un schéma ? Mentionne les éléments clés, leur disposition et les relations entre eux."
 	case "German":
 		prompt = "beschreibe dieses Bild"
 	case "Italian":
@@ -60,12 +67,16 @@ func DescribeImg(img string, lang string) (string, error) {
 			return "", err
 		}
 	}
-
+	log.Info("Use ollama to describe image : ", img)
 	client, err := api.ClientFromEnvironment()
 	CheckError(err)
 
+	mymodel := viper.Get("Model")
+	log.Info("Use model  : ", mymodel.(string))
+	log.Info("Use promt  : ", prompt)
+
 	req := &api.GenerateRequest{
-		Model:  "llava:7b",
+		Model:  mymodel.(string),
 		Prompt: prompt,
 		Images: []api.ImageData{imgData},
 	}

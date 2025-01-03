@@ -54,9 +54,11 @@ Flags:
 Use "tomd [command] --help" for more information about a command.
 ```
 
-If `-i` option is use, `ollama` and llm `llava:7b` are used to describe images at the end of markdown file. 
-So do not forget install [ollama](https://ollama.com) and to pull `llava:7b` with `ollama pull llava:7b` before using this option.
-You can use an other model by setting TOMD_MODEL env variable with your target models.
+If `-i` option is used, `ollama` and llm `llava:7b` are used to describe images at the end of the markdown file.
+So do not forget to install [ollama](https://ollama.com) and to pull `llava:7b` with `ollama pull llava:7b` before using this option.
+
+You can use another model by setting `TOMD_MODEL` env variable with your target models.
+
 
 ```shell
 $ export TOMD_MODEL=llama3.2-vision:latest  tomd page -f <file-url> -d <directory> -i

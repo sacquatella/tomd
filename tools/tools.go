@@ -101,8 +101,8 @@ func BuildMetadata(content *goquery.Document, url string, prefix string, complem
 		metaData.Authors = append(metaData.Authors, webPageAuthor)
 	}
 	// date should be in ISO 8601 format without seconds
-	metaData.Creation_date = content.Find("meta[name='date']").AttrOr("content", time.Now().Format("2006-01-02T15:04:05Z07:00"))
-	metaData.Last_update_date = content.Find("meta[name='update-date']").AttrOr("content", time.Now().Format("2006-01-02T15:04:05Z07:00"))
+	metaData.Creation_date = content.Find("meta[name='date']").AttrOr("content", time.Now().Format("2006-01-02T15:04:05"))
+	metaData.Last_update_date = content.Find("meta[name='update-date']").AttrOr("content", time.Now().Format("2006-01-02T15:04:05"))
 
 	metaData.Visibility = "Interne"
 

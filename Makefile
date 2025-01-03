@@ -2,7 +2,7 @@ VERSION=`git describe --tags`
 BUILD=`date +%FT%T%z`
 HASH=`git log -1 --format=%H`
 AUTHOR=`git log -1 --format=%ce`
-LDFLAGS=-ldflags "-w -s -X main.Release=${VERSION} -X main.Date=${BUILD} -X main.Build=${HASH} -X main.Author=${AUTHOR} "
+LDFLAGS=-ldflags "-w -s -X cmd.Version=${VERSION}  -X cmd.Build=${HASH}"
 
 
 

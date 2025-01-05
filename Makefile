@@ -4,9 +4,6 @@ HASH=`git log -1 --format=%H`
 AUTHOR=`git log -1 --format=%ce`
 LDFLAGS=-ldflags "-w -s -X cmd.Version=${VERSION}  -X cmd.Build=${HASH}"
 
-
-
-
 dependencies:
 	go mod tidy
 	ollama pull llava:7b
@@ -26,3 +23,9 @@ build-osx-arm:
 build-windows:
 	go mod tidy
 	GOOS=windows GOARCH=amd64 go build -a -v ${LDFLAGS} -o bin/windows/tomd.exe
+
+clean:
+	go clean
+
+test:
+	go test -v ./...

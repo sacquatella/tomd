@@ -7,6 +7,7 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
+	"github.com/mattn/go-runewidth"
 	log "github.com/sirupsen/logrus"
 	"io"
 	"os"
@@ -15,7 +16,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/mattn/go-runewidth"
 	"github.com/sacquatella/tomd/tools"
 )
 
@@ -328,6 +328,7 @@ func (zf *file) walk(node *Node, w io.Writer) error {
 				continue
 			}
 			var cols []string
+			isHeaderRow := false
 			for _, tc := range tr.Nodes {
 				if tc.XMLName.Local != "tc" {
 					continue
@@ -336,10 +337,28 @@ func (zf *file) walk(node *Node, w io.Writer) error {
 				if err := zf.walk(&tc, &cbuf); err != nil {
 					return err
 				}
-				cols = append(cols, strings.Replace(cbuf.String(), "\n", "", -1))
+				content := strings.TrimSpace(cbuf.String())
+
+				// Vérifiez si cette cellule appartient à une ligne d'entête
+				for _, tcPr := range tc.Nodes {
+					if tcPr.XMLName.Local == "tcPr" {
+						for _, attr := range tcPr.Attrs {
+							if attr.Name.Local == "val" && attr.Value == "Header" {
+								isHeaderRow = true
+							}
+						}
+					}
+				}
+				if isHeaderRow {
+					cols = append(cols, "**"+content+"**") // Contenu de l'entête en gras
+				} else {
+					cols = append(cols, content)
+				}
 			}
 			rows = append(rows, cols)
 		}
+
+		// Gestion de la largeur des colonnes et affichage
 		maxcol := 0
 		for _, cols := range rows {
 			if len(cols) > maxcol {
@@ -358,7 +377,7 @@ func (zf *file) walk(node *Node, w io.Writer) error {
 			}
 		}
 		for i, row := range rows {
-			if i == 0 {
+			if i == 0 { // Première ligne, entête
 				for j := 0; j < maxcol; j++ {
 					fmt.Fprint(w, "|")
 					fmt.Fprint(w, strings.Repeat(" ", widths[j]))

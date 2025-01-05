@@ -7,6 +7,7 @@ require (
 	github.com/PuerkitoBio/goquery v1.10.0
 	github.com/abadojack/whatlanggo v1.0.1
 	github.com/apcera/termtables v0.0.0-20170405184538-bcbc5dc54055
+	github.com/mattn/go-runewidth v0.0.16
 	github.com/ollama/ollama v0.5.4
 	github.com/rsc/pdf v0.1.1
 	github.com/sirupsen/logrus v1.9.3
@@ -20,7 +21,6 @@ require (
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/magiconair/properties v1.8.7 // indirect
-	github.com/mattn/go-runewidth v0.0.16 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.2 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect

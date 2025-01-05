@@ -7,6 +7,7 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
+	log "github.com/sirupsen/logrus"
 	"io"
 	"os"
 	"path"
@@ -133,6 +134,13 @@ type Node struct {
 	Nodes   []Node     `xml:",any"`
 }
 
+var customHeadings map[string]int = map[string]int{
+	"Titre1":         1,
+	"Titre2":         2,
+	"CustomHeading1": 1,
+	// Ajoutez d'autres styles ici
+}
+
 // UnmarshalXML is
 func (n *Node) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
 	n.Attrs = start.Attr
@@ -231,16 +239,15 @@ func (zf *file) walk(node *Node, w io.Writer) error {
 				}
 			case "pStyle":
 				if val, ok := attr(n.Attrs, "val"); ok {
+					log.Infof("Style found: %s\n", val) // Debug
 					if strings.HasPrefix(val, "Heading") {
 						if i, err := strconv.Atoi(val[7:]); err == nil && i > 0 {
 							fmt.Fprint(w, strings.Repeat("#", i)+" ")
 						}
-					} else if val == "Code" {
-						code = true
+					} else if level, found := customHeadings[val]; found {
+						fmt.Fprint(w, strings.Repeat("#", level)+" ")
 					} else {
-						if i, err := strconv.Atoi(val); err == nil && i > 0 {
-							fmt.Fprint(w, strings.Repeat("#", i)+" ")
-						}
+						log.Infof("Unrecognized style: %s\n", val)
 					}
 				}
 			case "numPr":

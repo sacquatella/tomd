@@ -1,6 +1,7 @@
 package docx2md
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -29,14 +30,14 @@ func TestEscape(t *testing.T) {
 func TestDocxToMd_ValidDocx(t *testing.T) {
 
 	docxfile := "../samples/test.docx"
-	expectedMarkdown := "../samples/test-docx.md"
+	expectedMarkdown := "Titre One\nExemple de texte en HTML \n## Titre Two\nAutre exemple de texte en HTML"
 	embed := false
 
-	result, err := Docx2md(docxfile, embed)
+	result, _, err := Docx2md(docxfile, embed)
 	if err != nil {
 		t.Errorf("expected no error, got %v", err)
 	}
-	if result != expectedMarkdown {
-		t.Errorf("expected %s, got %s", expectedMarkdown, result)
+	if !strings.Contains(result, expectedMarkdown) {
+		t.Errorf("expected %s to contain %s", result, expectedMarkdown)
 	}
 }

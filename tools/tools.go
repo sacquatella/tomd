@@ -133,10 +133,33 @@ func BuildMetadata(content *goquery.Document, url string, prefix string, complem
 }
 
 // BuildFileMetadata build metadata for a docs or pdf file.
-func BuildFileMetadata(docpath string, url string, prefix string, complement Metadata) (string, Metadata) {
+func BuildFileMetadata(docpath string, url string, prefix string, meta Metadata, complement Metadata) (string, Metadata) {
 	var metaData Metadata
 
-	metaData.Title = strings.ReplaceAll(filepath.Base(docpath), filepath.Ext(docpath), "")
+	//metaData.Title = strings.ReplaceAll(filepath.Base(docpath), filepath.Ext(docpath), "")
+	defaultTitle := strings.ReplaceAll(filepath.Base(docpath), filepath.Ext(docpath), "")
+
+	if complement.Title != "" {
+		// remove "/" values in title string
+		metaData.Title = complement.Title
+	} else if meta.Title != "" {
+		metaData.Title = meta.Title
+	} else {
+		metaData.Title = defaultTitle
+	}
+
+	if complement.Description != "" {
+		metaData.Description = complement.Description
+	} else if meta.Description != "" {
+		metaData.Description = meta.Description
+	} else {
+		metaData.Description = defaultTitle
+	}
+
+	if meta.Authors != nil {
+		metaData.Authors = meta.Authors
+	}
+
 	// Build doc_id as TITLE in UPPERCASE WITHOUT SPACE
 	// set doc_id as prefix + "_" + content.ID
 	doc_id := strings.ReplaceAll(strings.ToUpper(metaData.Title), " ", "")
@@ -162,6 +185,12 @@ func BuildFileMetadata(docpath string, url string, prefix string, complement Met
 	for _, author := range metaData.Authors {
 		authorslist += "\n" + "- " + author
 	}
+
+	// date should be in ISO 8601 format without seconds
+	metaData.Creation_date = time.Now().Format("2006-01-02T15:04:05")
+	metaData.Last_update_date = time.Now().Format("2006-01-02T15:04:05")
+
+	metaData.Visibility = "Internal"
 
 	pageMetadata := fmt.Sprintf("---\ntitle: %s\ndoc_id: %s\ndescription: %s\ntags: %s\nsite_url: %s\nauthors: %s\ncreation_date: %s\nlast_update_date: %s\nvisibility: %s\n---\n",
 		metaData.Title,
@@ -318,4 +347,13 @@ func DisplayOnScreen(exportedPages []Page) {
 		table.AddRow(page.PageId, page.Url, page.MdFile)
 	}
 	fmt.Println(table.Render())
+}
+
+// BuildFilename build a filename
+func BuildFilename(title string) string {
+	title = strings.ReplaceAll(title, " ", "-")
+	title = strings.ReplaceAll(title, "/", "-")
+	title = strings.ReplaceAll(title, "'", "-")
+	title = strings.ToLower(title) + ".md"
+	return title
 }

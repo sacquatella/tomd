@@ -14,7 +14,7 @@ func GetPDF(pdfPath string, url string, customerId string, exportDir string, com
 	CheckError(err)
 
 	// Add metadata header to markdown with title , doc_id,description , tags, site_url, authors, creation_date, last_update
-	metadata, metaDatas := BuildFileMetadata(pdfPath, url, customerId, complements)
+	metadata, metaDatas := BuildFileMetadata(pdfPath, url, customerId, Metadata{}, complements)
 
 	// Add metadata header to markdown
 	markdown = metadata + markdown

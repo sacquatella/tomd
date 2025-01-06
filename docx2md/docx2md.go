@@ -19,129 +19,7 @@ import (
 	"github.com/sacquatella/tomd/tools"
 )
 
-const name = "docx2md"
-const version = "0.0.9"
-
-var revision = "HEAD"
-
-// Relationship is
-type Relationship struct {
-	Text       string `xml:",chardata"`
-	ID         string `xml:"Id,attr"`
-	Type       string `xml:"Type,attr"`
-	Target     string `xml:"Target,attr"`
-	TargetMode string `xml:"TargetMode,attr"`
-}
-
-// Relationships is
-type Relationships struct {
-	XMLName      xml.Name       `xml:"Relationships"`
-	Text         string         `xml:",chardata"`
-	Xmlns        string         `xml:"xmlns,attr"`
-	Relationship []Relationship `xml:"Relationship"`
-}
-
-// TextVal is
-type TextVal struct {
-	Text string `xml:",chardata"`
-	Val  string `xml:"val,attr"`
-}
-
-// NumberingLvl is
-type NumberingLvl struct {
-	Text      string  `xml:",chardata"`
-	Ilvl      string  `xml:"ilvl,attr"`
-	Tplc      string  `xml:"tplc,attr"`
-	Tentative string  `xml:"tentative,attr"`
-	Start     TextVal `xml:"start"`
-	NumFmt    TextVal `xml:"numFmt"`
-	LvlText   TextVal `xml:"lvlText"`
-	LvlJc     TextVal `xml:"lvlJc"`
-	PPr       struct {
-		Text string `xml:",chardata"`
-		Ind  struct {
-			Text    string `xml:",chardata"`
-			Left    string `xml:"left,attr"`
-			Hanging string `xml:"hanging,attr"`
-		} `xml:"ind"`
-	} `xml:"pPr"`
-	RPr struct {
-		Text string `xml:",chardata"`
-		U    struct {
-			Text string `xml:",chardata"`
-			Val  string `xml:"val,attr"`
-		} `xml:"u"`
-		RFonts struct {
-			Text string `xml:",chardata"`
-			Hint string `xml:"hint,attr"`
-		} `xml:"rFonts"`
-	} `xml:"rPr"`
-}
-
-// Numbering is
-type Numbering struct {
-	XMLName     xml.Name `xml:"numbering"`
-	Text        string   `xml:",chardata"`
-	Wpc         string   `xml:"wpc,attr"`
-	Cx          string   `xml:"cx,attr"`
-	Cx1         string   `xml:"cx1,attr"`
-	Mc          string   `xml:"mc,attr"`
-	O           string   `xml:"o,attr"`
-	R           string   `xml:"r,attr"`
-	M           string   `xml:"m,attr"`
-	V           string   `xml:"v,attr"`
-	Wp14        string   `xml:"wp14,attr"`
-	Wp          string   `xml:"wp,attr"`
-	W10         string   `xml:"w10,attr"`
-	W           string   `xml:"w,attr"`
-	W14         string   `xml:"w14,attr"`
-	W15         string   `xml:"w15,attr"`
-	W16se       string   `xml:"w16se,attr"`
-	Wpg         string   `xml:"wpg,attr"`
-	Wpi         string   `xml:"wpi,attr"`
-	Wne         string   `xml:"wne,attr"`
-	Wps         string   `xml:"wps,attr"`
-	Ignorable   string   `xml:"Ignorable,attr"`
-	AbstractNum []struct {
-		Text                       string         `xml:",chardata"`
-		AbstractNumID              string         `xml:"abstractNumId,attr"`
-		RestartNumberingAfterBreak string         `xml:"restartNumberingAfterBreak,attr"`
-		Nsid                       TextVal        `xml:"nsid"`
-		MultiLevelType             TextVal        `xml:"multiLevelType"`
-		Tmpl                       TextVal        `xml:"tmpl"`
-		Lvl                        []NumberingLvl `xml:"lvl"`
-	} `xml:"abstractNum"`
-	Num []struct {
-		Text          string  `xml:",chardata"`
-		NumID         string  `xml:"numId,attr"`
-		AbstractNumID TextVal `xml:"abstractNumId"`
-	} `xml:"num"`
-}
-
-type file struct {
-	rels  Relationships
-	num   Numbering
-	r     *zip.ReadCloser
-	embed bool
-	list  map[string]int
-}
-
-// Node is
-type Node struct {
-	XMLName xml.Name
-	Attrs   []xml.Attr `xml:"-"`
-	Content []byte     `xml:",innerxml"`
-	Nodes   []Node     `xml:",any"`
-}
-
-var customHeadings map[string]int = map[string]int{
-	"Titre1":         1,
-	"Titre2":         2,
-	"CustomHeading1": 1,
-	// Ajoutez d'autres styles ici
-}
-
-// UnmarshalXML is
+// UnmarshalXML
 func (n *Node) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
 	n.Attrs = start.Attr
 	type node Node
@@ -149,6 +27,7 @@ func (n *Node) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
 	return d.DecodeElement((*node)(n), &start)
 }
 
+// escape escapes the characters in a string using the given set of characters.
 func escape(s, set string) string {
 	replacer := []string{}
 	for _, r := range []rune(set) {
@@ -158,6 +37,7 @@ func escape(s, set string) string {
 	return strings.NewReplacer(replacer...).Replace(s)
 }
 
+// extract
 func (zf *file) extract(rel *Relationship, w io.Writer) error {
 	err := os.MkdirAll(filepath.Dir(rel.Target), 0755)
 	if err != nil {
@@ -193,6 +73,7 @@ func (zf *file) extract(rel *Relationship, w io.Writer) error {
 	return nil
 }
 
+// attr returns the value of the attribute with the given name.
 func attr(attrs []xml.Attr, name string) (string, bool) {
 	for _, attr := range attrs {
 		if attr.Name.Local == name {
@@ -202,6 +83,7 @@ func attr(attrs []xml.Attr, name string) (string, bool) {
 	return "", false
 }
 
+// walk traverses the XML tree and writes the content to the writer.
 func (zf *file) walk(node *Node, w io.Writer) error {
 	switch node.XMLName.Local {
 	case "hyperlink":
@@ -484,6 +366,7 @@ func (zf *file) walk(node *Node, w io.Writer) error {
 	return nil
 }
 
+// readFile
 func readFile(f *zip.File) (*Node, error) {
 	rc, err := f.Open()
 	defer rc.Close()
@@ -510,17 +393,18 @@ func findFile(files []*zip.File, target string) *zip.File {
 	return nil
 }
 
-// docx2md return a markdown string from a docx file
-func Docx2md(arg string, embed bool) (string, error) {
+// Docx2md return a markdown string from a docx file
+func Docx2md(arg string, embed bool) (string, tools.Metadata, error) {
 
 	r, err := zip.OpenReader(arg)
 	if err != nil {
-		return "", err
+		return "", tools.Metadata{}, err
 	}
 	defer r.Close()
 
 	var rels Relationships
 	var num Numbering
+	var prop CoreProperties
 
 	for _, f := range r.File {
 		switch f.Name {
@@ -530,12 +414,12 @@ func Docx2md(arg string, embed bool) (string, error) {
 
 			b, _ := io.ReadAll(rc)
 			if err != nil {
-				return "", err
+				return "", tools.Metadata{}, err
 			}
 
 			err = xml.Unmarshal(b, &rels)
 			if err != nil {
-				return "", err
+				return "", tools.Metadata{}, err
 			}
 		case "word/numbering.xml":
 			rc, err := f.Open()
@@ -543,23 +427,37 @@ func Docx2md(arg string, embed bool) (string, error) {
 
 			b, _ := io.ReadAll(rc)
 			if err != nil {
-				return "", err
+				return "", tools.Metadata{}, err
 			}
 
 			err = xml.Unmarshal(b, &num)
 			if err != nil {
-				return "", err
+				return "", tools.Metadata{}, err
 			}
+		case "docProps/core.xml":
+			rc, err := f.Open()
+			defer rc.Close()
+
+			b, _ := io.ReadAll(rc)
+			if err != nil {
+				return "", tools.Metadata{}, err
+			}
+
+			err = xml.Unmarshal(b, &prop)
+			if err != nil {
+				return "", tools.Metadata{}, err
+			}
+
 		}
 	}
 
 	f := findFile(r.File, "word/document*.xml")
 	if f == nil {
-		return "", errors.New("incorrect document")
+		return "", tools.Metadata{}, errors.New("incorrect document")
 	}
 	node, err := readFile(f)
 	if err != nil {
-		return "", err
+		return "", tools.Metadata{}, err
 	}
 
 	var buf bytes.Buffer
@@ -572,26 +470,30 @@ func Docx2md(arg string, embed bool) (string, error) {
 	}
 	err = zf.walk(node, &buf)
 	if err != nil {
-		return "", err
+		return "", tools.Metadata{}, err
 	}
 	//fmt.Print(buf.String())
+	log.Infof("Properties Title : %s\n", prop.Title)
+	var authors []string
 
-	return buf.String(), nil
+	meta := tools.Metadata{Title: prop.Title, Description: prop.Description, Authors: append(authors, prop.Creator)}
+
+	return buf.String(), meta, nil
 }
 
 // GetDocx convert a docx file to markdown and add metadata header
 func GetDocx(docxPath string, url string, customerId string, exportDir string, complements tools.Metadata) (tools.Page, error) {
 
-	markdown, err := Docx2md(docxPath, false)
+	markdown, meta, err := Docx2md(docxPath, false)
 	tools.CheckError(err)
 
 	// Add metadata header to markdown with title , doc_id,description , tags, site_url, authors, creation_date, last_update
-	metadata, metaDatas := tools.BuildFileMetadata(docxPath, url, customerId, complements)
+	metadata, metaDatas := tools.BuildFileMetadata(docxPath, url, customerId, meta, complements)
 
 	// Add metadata header to markdown
 	markdown = metadata + markdown
 
-	exportedFile := exportDir + "/" + customerId + "-" + metaDatas.Title + ".md"
+	exportedFile := exportDir + "/" + customerId + "-" + tools.BuildFilename(metaDatas.Title)
 	// Écrire le Markdown dans un fichier
 	err = tools.WriteMarkdownToFile(markdown, exportedFile)
 	tools.CheckError(err)

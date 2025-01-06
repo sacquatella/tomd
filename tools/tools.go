@@ -132,6 +132,79 @@ func BuildMetadata(content *goquery.Document, url string, prefix string, complem
 	return pageMetadata, metaData
 }
 
+// BuildFileMetadata build metadata for a docs or pdf file.
+func BuildFileMetadata(docpath string, url string, prefix string, meta Metadata, complement Metadata) (string, Metadata) {
+	var metaData Metadata
+
+	//metaData.Title = strings.ReplaceAll(filepath.Base(docpath), filepath.Ext(docpath), "")
+	defaultTitle := strings.ReplaceAll(filepath.Base(docpath), filepath.Ext(docpath), "")
+
+	if complement.Title != "" {
+		// remove "/" values in title string
+		metaData.Title = complement.Title
+	} else if meta.Title != "" {
+		metaData.Title = meta.Title
+	} else {
+		metaData.Title = defaultTitle
+	}
+
+	if complement.Description != "" {
+		metaData.Description = complement.Description
+	} else if meta.Description != "" {
+		metaData.Description = meta.Description
+	} else {
+		metaData.Description = defaultTitle
+	}
+
+	if meta.Authors != nil {
+		metaData.Authors = meta.Authors
+	}
+
+	// Build doc_id as TITLE in UPPERCASE WITHOUT SPACE
+	// set doc_id as prefix + "_" + content.ID
+	doc_id := strings.ReplaceAll(strings.ToUpper(metaData.Title), " ", "")
+	metaData.Doc_id = strings.ToUpper(prefix + "_" + doc_id)
+
+	// Add metadata header to markdown with title , doc_id,description , tags, site_url, authors, creation_date, last_update
+	metaData.Tags = append(metaData.Tags, "file")
+	// set site_url
+	metaData.Site_url = url
+	// add new authors if complement.authors is not empty
+	if len(complement.Authors) > 0 {
+		for _, author := range complement.Authors {
+			metaData.Authors = append(metaData.Authors, author)
+		}
+	}
+	// build metadata tag list
+	var taglist string
+	for _, tag := range metaData.Tags {
+		taglist += "\n" + "- " + tag
+	}
+	// build authors list
+	var authorslist string
+	for _, author := range metaData.Authors {
+		authorslist += "\n" + "- " + author
+	}
+
+	// date should be in ISO 8601 format without seconds
+	metaData.Creation_date = time.Now().Format("2006-01-02T15:04:05")
+	metaData.Last_update_date = time.Now().Format("2006-01-02T15:04:05")
+
+	metaData.Visibility = "Internal"
+
+	pageMetadata := fmt.Sprintf("---\ntitle: %s\ndoc_id: %s\ndescription: %s\ntags: %s\nsite_url: %s\nauthors: %s\ncreation_date: %s\nlast_update_date: %s\nvisibility: %s\n---\n",
+		metaData.Title,
+		metaData.Doc_id,
+		metaData.Description,
+		taglist,
+		metaData.Site_url,
+		authorslist,
+		metaData.Creation_date,    // date should be in ISO 8601 format without seconds
+		metaData.Last_update_date, // date should be in ISO 8601 format without seconds
+		metaData.Visibility)
+	return pageMetadata, metaData
+}
+
 // GetImgList get all images from a web page and return a list of image url
 func GetImgList(content *goquery.Document, ispath string, scheme string, domain string) ([]string, error) {
 
@@ -274,4 +347,13 @@ func DisplayOnScreen(exportedPages []Page) {
 		table.AddRow(page.PageId, page.Url, page.MdFile)
 	}
 	fmt.Println(table.Render())
+}
+
+// BuildFilename build a filename
+func BuildFilename(title string) string {
+	title = strings.ReplaceAll(title, " ", "-")
+	title = strings.ReplaceAll(title, "/", "-")
+	title = strings.ReplaceAll(title, "'", "-")
+	title = strings.ToLower(title) + ".md"
+	return title
 }

@@ -1,6 +1,7 @@
 # toMD
 
 Simple golang cli to convert a web page or a set of web pages to markdown format.
+The cli is also able to extract text from a PDF file or a DOCX file and convert it to markdown format.
 
 ## Usage
 
@@ -24,10 +25,16 @@ with :
 ]
 ```
 
-Extract PDF text as markdown file
+Extract PDF text as markdown file (basic text extraction)
 ```shell
 $ tomd pdf -f <pdf-file> -d <directory>
 ```
+
+Extract DOCX text as markdown file (basic text extraction)
+```shell
+$ tomd docx -f <docx-file> -d <directory>
+```
+
 
 ## Options 
 
@@ -39,6 +46,7 @@ Usage:
 
 Available Commands:
   completion  Generate the autocompletion script for the specified shell
+  docx        Get Docx text content as a markdown file
   file        Get a list of web pages as markdown files
   help        Help about any command
   page        Get a web page as a markdown file
@@ -59,12 +67,9 @@ So do not forget to install [ollama](https://ollama.com) and to pull `llava:7b` 
 
 You can use another model by setting `TOMD_MODEL` env variable with your target models.
 
-
 ```shell
 $ export TOMD_MODEL=llama3.2-vision:latest  tomd page -f <file-url> -d <directory> -i
 ```
-
-
 
 ## Build
 

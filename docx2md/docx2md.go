@@ -481,6 +481,91 @@ func Docx2md(arg string, embed bool) (string, tools.Metadata, error) {
 	return buf.String(), meta, nil
 }
 
+// Pptx2md convert a pptx file to markdown and add metadata header
+func Pptx2md(pptxPath string, url string, customerId string, exportDir string, complements tools.Metadata) (tools.Page, error) {
+	// Ouvrir le fichier PPTX
+	r, err := zip.OpenReader(pptxPath)
+	if err != nil {
+		return tools.Page{}, err
+	}
+	defer r.Close()
+
+	// Initialiser les variables pour les relations et les propriétés
+	var rels Relationships
+	var prop CoreProperties
+
+	// Lire les fichiers nécessaires dans le fichier PPTX
+	for _, f := range r.File {
+		switch f.Name {
+		case "ppt/_rels/presentation.xml.rels":
+			rc, err := f.Open()
+			defer rc.Close()
+			if err != nil {
+				return tools.Page{}, err
+			}
+			b, _ := io.ReadAll(rc)
+			err = xml.Unmarshal(b, &rels)
+			if err != nil {
+				return tools.Page{}, err
+			}
+		case "docProps/core.xml":
+			rc, err := f.Open()
+			defer rc.Close()
+			if err != nil {
+				return tools.Page{}, err
+			}
+			b, _ := io.ReadAll(rc)
+			err = xml.Unmarshal(b, &prop)
+			if err != nil {
+				return tools.Page{}, err
+			}
+		}
+	}
+
+	// Parcourir tous les fichiers de slides
+	var buf bytes.Buffer
+	for i := 1; ; i++ {
+		slideName := fmt.Sprintf("ppt/slides/slide%d.xml", i)
+		f := findFile(r.File, slideName)
+		if f == nil {
+			break
+		}
+		node, err := readFile(f)
+		if err != nil {
+			return tools.Page{}, err
+		}
+
+		// Convertir le contenu en Markdown
+		zf := &file{
+			r:     r,
+			rels:  rels,
+			embed: false,
+			list:  make(map[string]int),
+		}
+		err = zf.walk(node, &buf)
+		if err != nil {
+			return tools.Page{}, err
+		}
+		buf.WriteString("\n---\n") // Séparateur entre les slides
+	}
+
+	// Ajouter les métadonnées
+	var authors []string
+	meta := tools.Metadata{Title: prop.Title, Description: prop.Description, Authors: append(authors, prop.Creator)}
+	markdown := buf.String()
+	metadata, metaDatas := tools.BuildFileMetadata(pptxPath, url, customerId, meta, complements)
+	markdown = metadata + markdown
+
+	// Écrire le Markdown dans un fichier
+	exportedFile := exportDir + "/" + customerId + "-" + tools.BuildFilename(metaDatas.Title)
+	err = tools.WriteMarkdownToFile(markdown, exportedFile)
+	if err != nil {
+		return tools.Page{}, err
+	}
+
+	return tools.Page{PageId: metaDatas.Doc_id, Url: metaDatas.Site_url, MdFile: exportedFile}, nil
+}
+
 // GetDocx convert a docx file to markdown and add metadata header
 func GetDocx(docxPath string, url string, customerId string, exportDir string, complements tools.Metadata) (tools.Page, error) {
 
@@ -500,3 +585,23 @@ func GetDocx(docxPath string, url string, customerId string, exportDir string, c
 
 	return tools.Page{PageId: metaDatas.Doc_id, Url: metaDatas.Site_url, MdFile: exportedFile}, nil
 }
+
+// GetPptx convert a pptx file to markdown and add metadata header
+/*func GetPptx(pptxPath string, url string, customerId string, exportDir string, complements tools.Metadata) (tools.Page, error) {
+
+	markdown, meta, err := Pptx2md(pptxPath, false)
+	tools.CheckError(err)
+
+	// Add metadata header to markdown with title , doc_id,description , tags, site_url, authors, creation_date, last_update
+	metadata, metaDatas := tools.BuildFileMetadata(pptxPath, url, customerId, meta, complements)
+
+	// Add metadata header to markdown
+	markdown = metadata + markdown
+
+	exportedFile := exportDir + "/" + customerId + "-" + tools.BuildFilename(metaDatas.Title)
+	// Écrire le Markdown dans un fichier
+	err = tools.WriteMarkdownToFile(markdown, exportedFile)
+	tools.CheckError(err)
+
+	return tools.Page{PageId: metaDatas.Doc_id, Url: metaDatas.Site_url, MdFile: exportedFile}, nil
+}*/

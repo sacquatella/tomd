@@ -21,6 +21,7 @@ import (
 )
 
 var Docx string
+var CustomerIdDocx string
 
 //var CustomerIdDocx string
 
@@ -38,12 +39,11 @@ func init() {
 	docxCmd.PersistentFlags().StringVarP(&CustomerIdDocx, "cid", "c", "docx", "Customer ID code ")
 }
 
-// getWebPage get a web page by its id and generate a markdown page with its metadatas
+// getDocxDocument read docx and generate a markdown page with its metadatas
 func getDocxDocument(cmd *cobra.Command, args []string) {
 	var pages []tools.Page
 	datas, err := docx2md.GetDocx(Docx, Url, CustomerIdDocx, ExportDir, tools.Metadata{})
 	tools.CheckError(err)
 	pages = append(pages, datas)
 	tools.DisplayOnScreen(pages)
-
 }

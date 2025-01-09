@@ -19,7 +19,7 @@ import (
 	"github.com/sacquatella/tomd/tools"
 )
 
-// UnmarshalXML
+// UnmarshalXML unmarshals the XML element into a Node.
 func (n *Node) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
 	n.Attrs = start.Attr
 	type node Node
@@ -482,11 +482,11 @@ func Docx2md(arg string, embed bool) (string, tools.Metadata, error) {
 }
 
 // Pptx2md convert a pptx file to markdown and add metadata header
-func Pptx2md(pptxPath string, url string, customerId string, exportDir string, complements tools.Metadata) (tools.Page, error) {
+func Pptx2md(pptxPath string, embed bool) (string, tools.Metadata, error) {
 	// Ouvrir le fichier PPTX
 	r, err := zip.OpenReader(pptxPath)
 	if err != nil {
-		return tools.Page{}, err
+		return "", tools.Metadata{}, err
 	}
 	defer r.Close()
 
@@ -501,23 +501,23 @@ func Pptx2md(pptxPath string, url string, customerId string, exportDir string, c
 			rc, err := f.Open()
 			defer rc.Close()
 			if err != nil {
-				return tools.Page{}, err
+				return "", tools.Metadata{}, err
 			}
 			b, _ := io.ReadAll(rc)
 			err = xml.Unmarshal(b, &rels)
 			if err != nil {
-				return tools.Page{}, err
+				return "", tools.Metadata{}, err
 			}
 		case "docProps/core.xml":
 			rc, err := f.Open()
 			defer rc.Close()
 			if err != nil {
-				return tools.Page{}, err
+				return "", tools.Metadata{}, err
 			}
 			b, _ := io.ReadAll(rc)
 			err = xml.Unmarshal(b, &prop)
 			if err != nil {
-				return tools.Page{}, err
+				return "", tools.Metadata{}, err
 			}
 		}
 	}
@@ -532,7 +532,7 @@ func Pptx2md(pptxPath string, url string, customerId string, exportDir string, c
 		}
 		node, err := readFile(f)
 		if err != nil {
-			return tools.Page{}, err
+			return "", tools.Metadata{}, err
 		}
 
 		// Convertir le contenu en Markdown
@@ -544,7 +544,7 @@ func Pptx2md(pptxPath string, url string, customerId string, exportDir string, c
 		}
 		err = zf.walk(node, &buf)
 		if err != nil {
-			return tools.Page{}, err
+			return "", tools.Metadata{}, err
 		}
 		buf.WriteString("\n---\n") // Séparateur entre les slides
 	}
@@ -553,17 +553,8 @@ func Pptx2md(pptxPath string, url string, customerId string, exportDir string, c
 	var authors []string
 	meta := tools.Metadata{Title: prop.Title, Description: prop.Description, Authors: append(authors, prop.Creator)}
 	markdown := buf.String()
-	metadata, metaDatas := tools.BuildFileMetadata(pptxPath, url, customerId, meta, complements)
-	markdown = metadata + markdown
 
-	// Écrire le Markdown dans un fichier
-	exportedFile := exportDir + "/" + customerId + "-" + tools.BuildFilename(metaDatas.Title)
-	err = tools.WriteMarkdownToFile(markdown, exportedFile)
-	if err != nil {
-		return tools.Page{}, err
-	}
-
-	return tools.Page{PageId: metaDatas.Doc_id, Url: metaDatas.Site_url, MdFile: exportedFile}, nil
+	return markdown, meta, nil
 }
 
 // GetDocx convert a docx file to markdown and add metadata header
@@ -587,7 +578,7 @@ func GetDocx(docxPath string, url string, customerId string, exportDir string, c
 }
 
 // GetPptx convert a pptx file to markdown and add metadata header
-/*func GetPptx(pptxPath string, url string, customerId string, exportDir string, complements tools.Metadata) (tools.Page, error) {
+func GetPptx(pptxPath string, url string, customerId string, exportDir string, complements tools.Metadata) (tools.Page, error) {
 
 	markdown, meta, err := Pptx2md(pptxPath, false)
 	tools.CheckError(err)
@@ -604,4 +595,4 @@ func GetDocx(docxPath string, url string, customerId string, exportDir string, c
 	tools.CheckError(err)
 
 	return tools.Page{PageId: metaDatas.Doc_id, Url: metaDatas.Site_url, MdFile: exportedFile}, nil
-}*/
+}

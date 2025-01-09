@@ -21,7 +21,7 @@ import (
 )
 
 var Pptx string
-var CustomerIdDocx string
+var CustomerIdPptx string
 
 var pptxCmd = &cobra.Command{
 	Use:   "pptx",
@@ -34,13 +34,13 @@ func init() {
 	rootCmd.AddCommand(pptxCmd)
 	pptxCmd.PersistentFlags().StringVarP(&Pptx, "pptx", "s", "", "Pptx file")
 	pptxCmd.PersistentFlags().StringVarP(&Url, "url", "u", "", "Page URL for metadata")
-	pptxCmd.PersistentFlags().StringVarP(&CustomerIdDocx, "cid", "c", "docx", "Customer ID code ")
+	pptxCmd.PersistentFlags().StringVarP(&CustomerIdPptx, "cid", "c", "pptx", "Customer ID code ")
 }
 
-// getWebPage get a web page by its id and generate a markdown page with its metadatas
+// getPptxDocument read pptx and generate a markdown page with its metadatas
 func getPptxDocument(cmd *cobra.Command, args []string) {
 	var pages []tools.Page
-	datas, err := docx2md.Pptx2md(Pptx, Url, CustomerIdDocx, ExportDir, tools.Metadata{})
+	datas, err := docx2md.GetPptx(Pptx, Url, CustomerIdPptx, ExportDir, tools.Metadata{})
 	tools.CheckError(err)
 	pages = append(pages, datas)
 	tools.DisplayOnScreen(pages)

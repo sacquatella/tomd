@@ -37,16 +37,22 @@ func escape(s, set string) string {
 	return strings.NewReplacer(replacer...).Replace(s)
 }
 
-// extract
+// extract img
 func (zf *file) extract(rel *Relationship, w io.Writer) error {
 	err := os.MkdirAll(filepath.Dir(rel.Target), 0755)
 	if err != nil {
 		return err
 	}
 	for _, f := range zf.r.File {
-		if f.Name != "word/"+rel.Target {
+		log.Infof("File: %s\n", f.Name)
+		log.Infof("Target: %s\n", rel.Target)
+		// replace ../ by ppt/ in rel.Target for pptx case
+		pptxTarget := strings.Replace(rel.Target, "../", "ppt/", 1)
+		if f.Name != "word/"+rel.Target && f.Name != pptxTarget {
+			log.Infof("Not Match")
 			continue
 		}
+		log.Infof("Match Found compute image Name: %s\n and rel.Target %s\n", f.Name, rel.Target)
 		rc, err := f.Open()
 		if err != nil {
 			return err
@@ -87,6 +93,7 @@ func attr(attrs []xml.Attr, name string) (string, bool) {
 func (zf *file) walk(node *Node, w io.Writer) error {
 	switch node.XMLName.Local {
 	case "hyperlink":
+		// Traitement des hyperliens
 		fmt.Fprint(w, "[")
 		var cbuf bytes.Buffer
 		for _, n := range node.Nodes {
@@ -108,8 +115,10 @@ func (zf *file) walk(node *Node, w io.Writer) error {
 		}
 		fmt.Fprint(w, ")")
 	case "t":
+		// Traitement du texte
 		fmt.Fprint(w, string(node.Content))
 	case "pPr":
+		// Traitement des propriétés de paragraphe
 		code := false
 		for _, n := range node.Nodes {
 			switch n.XMLName.Local {
@@ -204,6 +213,7 @@ func (zf *file) walk(node *Node, w io.Writer) error {
 			fmt.Fprint(w, "`")
 		}
 	case "tbl":
+		// Traitement des tableaux
 		var rows [][]string
 		for _, tr := range node.Nodes {
 			if tr.XMLName.Local != "tr" {
@@ -285,6 +295,7 @@ func (zf *file) walk(node *Node, w io.Writer) error {
 		}
 		fmt.Fprint(w, "\n")
 	case "r":
+		// Traitement des runs
 		bold := false
 		italic := false
 		strike := false
@@ -329,6 +340,7 @@ func (zf *file) walk(node *Node, w io.Writer) error {
 			fmt.Fprint(w, "~~")
 		}
 	case "p":
+		// Traitement des paragraphes
 		for _, n := range node.Nodes {
 			if err := zf.walk(&n, w); err != nil {
 				return err
@@ -336,18 +348,23 @@ func (zf *file) walk(node *Node, w io.Writer) error {
 		}
 		fmt.Fprintln(w)
 	case "blip":
+		// Traitement des images
 		if id, ok := attr(node.Attrs, "embed"); ok {
 			for _, rel := range zf.rels.Relationship {
 				if id != rel.ID {
 					continue
 				}
+				log.Infof("Blip Image found target is: %s\n", rel.Target) // Debug
+				log.Infof("Blip Image found text %+v\n", rel)             // Debug
 				if err := zf.extract(&rel, w); err != nil {
 					return err
 				}
 			}
 		}
 	case "Fallback":
+		// Traitement des fallback
 	case "txbxContent":
+		// Traitement du contenu des boîtes de texte
 		var cbuf bytes.Buffer
 		for _, n := range node.Nodes {
 			if err := zf.walk(&n, &cbuf); err != nil {
@@ -496,8 +513,11 @@ func Pptx2md(pptxPath string, embed bool) (string, tools.Metadata, error) {
 
 	// Lire les fichiers nécessaires dans le fichier PPTX
 	for _, f := range r.File {
+		log.Debugf("File: %s\n", f.Name)
 		switch f.Name {
-		case "ppt/_rels/presentation.xml.rels":
+		//case "ppt/_rels/presentation.xml.rels", "ppt/slides/_rels/slide*.xml.rels":
+		//case "ppt/slides/_rels/slide*.xml.rels":
+		case "ppt/slides/_rels/slide1.xml.rels", "ppt/slides/_rels/slide2.xml.rels", "ppt/slides/_rels/slide3.xml.rels":
 			rc, err := f.Open()
 			defer rc.Close()
 			if err != nil {

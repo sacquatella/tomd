@@ -269,29 +269,40 @@ func (zf *file) walk(node *Node, w io.Writer) error {
 			}
 		}
 		for i, row := range rows {
-			if i == 0 { // Première ligne, entête
+			if i == 0 {
+				// Afficher la première ligne
 				for j := 0; j < maxcol; j++ {
 					fmt.Fprint(w, "|")
-					fmt.Fprint(w, strings.Repeat(" ", widths[j]))
+					if j < len(row) {
+						width := runewidth.StringWidth(row[j])
+						fmt.Fprint(w, escape(row[j], "|"))
+						fmt.Fprint(w, strings.Repeat(" ", widths[j]-width))
+					} else {
+						fmt.Fprint(w, strings.Repeat(" ", widths[j]))
+					}
 				}
 				fmt.Fprint(w, "|\n")
+
+				// Ligne de séparation après le header
 				for j := 0; j < maxcol; j++ {
 					fmt.Fprint(w, "|")
 					fmt.Fprint(w, strings.Repeat("-", widths[j]))
 				}
 				fmt.Fprint(w, "|\n")
-			}
-			for j := 0; j < maxcol; j++ {
-				fmt.Fprint(w, "|")
-				if j < len(row) {
-					width := runewidth.StringWidth(row[j])
-					fmt.Fprint(w, escape(row[j], "|"))
-					fmt.Fprint(w, strings.Repeat(" ", widths[j]-width))
-				} else {
-					fmt.Fprint(w, strings.Repeat(" ", widths[j]))
+			} else {
+				// Lignes normales du tableau
+				for j := 0; j < maxcol; j++ {
+					fmt.Fprint(w, "|")
+					if j < len(row) {
+						width := runewidth.StringWidth(row[j])
+						fmt.Fprint(w, escape(row[j], "|"))
+						fmt.Fprint(w, strings.Repeat(" ", widths[j]-width))
+					} else {
+						fmt.Fprint(w, strings.Repeat(" ", widths[j]))
+					}
 				}
+				fmt.Fprint(w, "|\n")
 			}
-			fmt.Fprint(w, "|\n")
 		}
 		fmt.Fprint(w, "\n")
 	case "r":

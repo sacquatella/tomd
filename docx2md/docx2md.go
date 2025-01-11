@@ -96,7 +96,7 @@ func attr(attrs []xml.Attr, name string) (string, bool) {
 // walk traverses the XML tree and writes the content to the writer.
 func (zf *file) walk(node *Node, w io.Writer) error {
 	switch node.XMLName.Local {
-	case "hyperlink":
+	case "hyperlink", "hlinkClick":
 		// Traitement des hyperliens
 		fmt.Fprint(w, "[")
 		var cbuf bytes.Buffer

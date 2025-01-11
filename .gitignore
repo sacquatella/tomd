@@ -36,3 +36,4 @@ media/
 .vscode/launch.json
 tomd
 samples/test-docx.zip
+samples/test-pptx.zip

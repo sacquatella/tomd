@@ -7,14 +7,15 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
-	"github.com/mattn/go-runewidth"
-	log "github.com/sirupsen/logrus"
 	"io"
 	"os"
 	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/mattn/go-runewidth"
+	log "github.com/sirupsen/logrus"
 
 	"github.com/sacquatella/tomd/tools"
 )
@@ -37,8 +38,11 @@ func escape(s, set string) string {
 	return strings.NewReplacer(replacer...).Replace(s)
 }
 
-// extract img
-func (zf *file) extract(rel *Relationship, w io.Writer) error {
+// extract img and générate markdown image tag with it decription
+func (zf *file) extract(rel *Relationship, w io.Writer, desc string) error {
+
+	description := strings.ReplaceAll(desc, "\n", "")
+
 	err := os.MkdirAll(filepath.Dir(rel.Target), 0755)
 	if err != nil {
 		return err
@@ -65,14 +69,14 @@ func (zf *file) extract(rel *Relationship, w io.Writer) error {
 			return err
 		}
 		if zf.embed {
-			fmt.Fprintf(w, "![](data:image/png;base64,%s)",
-				base64.StdEncoding.EncodeToString(b[:n]))
+			fmt.Fprintf(w, "![%s](data:image/png;base64,%s)",
+				description, base64.StdEncoding.EncodeToString(b[:n]))
 		} else {
 			err = os.WriteFile(rel.Target, b, 0644)
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(w, "![](%s)", escape(rel.Target, "()"))
+			fmt.Fprintf(w, "![%s](%s)", description, escape(rel.Target, "()"))
 		}
 		break
 	}
@@ -358,19 +362,52 @@ func (zf *file) walk(node *Node, w io.Writer) error {
 			}
 		}
 		fmt.Fprintln(w)
-	case "blip":
-		// Traitement des images
-		if id, ok := attr(node.Attrs, "embed"); ok {
-			for _, rel := range zf.rels.Relationship {
-				if id != rel.ID {
-					continue
+	/*case "blip":
+	// Traitement des images
+	if id, ok := attr(node.Attrs, "embed"); ok {
+		for _, rel := range zf.rels.Relationship {
+			if id != rel.ID {
+				continue
+			}
+			log.Infof("Blip Image found target is: %s\n", rel.Target) // Debug
+			log.Infof("Blip Image found text %+v\n", rel)             // Debug
+			if err := zf.extract(&rel, w, ""); err != nil {
+				return err
+			}
+		}
+	}*/
+	case "pic":
+		// manage images get image and description
+		var imageDesc string
+		for _, n := range node.Nodes {
+			if n.XMLName.Local != "blipFill" && n.XMLName.Local != "nvPicPr" {
+				continue
+			}
+			// loop arround subnode
+			for _, nn := range n.Nodes {
+				//var imageTitle, imageDesc string
+				// get description
+				if nn.XMLName.Local == "cNvPr" {
+					//imageTitle, _ = attr(n.Attrs, "title")
+					imageDesc, _ = attr(nn.Attrs, "descr")
 				}
-				log.Infof("Blip Image found target is: %s\n", rel.Target) // Debug
-				log.Infof("Blip Image found text %+v\n", rel)             // Debug
-				if err := zf.extract(&rel, w); err != nil {
-					return err
+				// get imgage
+				if nn.XMLName.Local == "blip" {
+					if id, ok := attr(nn.Attrs, "embed"); ok {
+						for _, rel := range zf.rels.Relationship {
+							if id != rel.ID {
+								continue
+							}
+							log.Infof("Blip Image found target is: %s\n", rel.Target) // Debug
+							log.Infof("Blip Image found text %+v\n", rel)             // Debug
+							if err := zf.extract(&rel, w, imageDesc); err != nil {
+								return err
+							}
+						}
+					}
 				}
 			}
+
 		}
 	case "Fallback":
 		// Traitement des fallback

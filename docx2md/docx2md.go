@@ -56,7 +56,7 @@ func (zf *file) extract(rel *Relationship, w io.Writer, desc string) error {
 			log.Infof("Not Match")
 			continue
 		}
-		log.Infof("Match Found compute image Name: %s\n and rel.Target %s\n", f.Name, rel.Target)
+		log.Infof("Match Found compute image Name: %s\n and rel.Target %s", f.Name, rel.Target)
 		rc, err := f.Open()
 		if err != nil {
 			return err
@@ -96,7 +96,7 @@ func attr(attrs []xml.Attr, name string) (string, bool) {
 // walk traverses the XML tree and writes the content to the writer.
 func (zf *file) walk(node *Node, w io.Writer) error {
 	switch node.XMLName.Local {
-	case "hyperlink", "hlinkClick":
+	case "hyperlink":
 		// Traitement des hyperliens
 		fmt.Fprint(w, "[")
 		var cbuf bytes.Buffer
@@ -310,14 +310,28 @@ func (zf *file) walk(node *Node, w io.Writer) error {
 		}
 		fmt.Fprint(w, "\n")
 	case "r":
-		// Traitement des runs
+		// Traitement des chaines en gras, italique et barré
 		bold := false
 		italic := false
 		strike := false
+		link := false
+		RelationId := ""
 		for _, n := range node.Nodes {
 			if n.XMLName.Local != "rPr" {
 				continue
 			}
+			// Loop arround subnode XMLName to get bold, italic and strike for pptx context
+			if _, exist := attr(n.Attrs, "b"); exist {
+				bold = true
+			}
+			if _, exist := attr(n.Attrs, "i"); exist {
+				italic = true
+			}
+			if _, exist := attr(n.Attrs, "strike"); exist {
+				strike = true
+			}
+
+			// Loop arround subnode XMLName to get bold, italic and strike for docx context
 			for _, nn := range n.Nodes {
 				switch nn.XMLName.Local {
 				case "b":
@@ -326,6 +340,9 @@ func (zf *file) walk(node *Node, w io.Writer) error {
 					italic = true
 				case "strike":
 					strike = true
+				case "hlinkClick":
+					link = true
+					RelationId, _ = attr(nn.Attrs, "id")
 				}
 			}
 		}
@@ -338,13 +355,16 @@ func (zf *file) walk(node *Node, w io.Writer) error {
 		if italic {
 			fmt.Fprint(w, "*")
 		}
+		if link {
+			fmt.Fprint(w, "[")
+		}
 		var cbuf bytes.Buffer
 		for _, n := range node.Nodes {
 			if err := zf.walk(&n, &cbuf); err != nil {
 				return err
 			}
 		}
-		fmt.Fprint(w, escape(cbuf.String(), `*~\`))
+		fmt.Fprint(w, escape(cbuf.String(), `*~[\`))
 		if italic {
 			fmt.Fprint(w, "*")
 		}
@@ -354,6 +374,16 @@ func (zf *file) walk(node *Node, w io.Writer) error {
 		if strike {
 			fmt.Fprint(w, "~~")
 		}
+		if link {
+			fmt.Fprint(w, "](")
+			for _, rel := range zf.rels.Relationship {
+				if RelationId == rel.ID {
+					fmt.Fprint(w, escape(rel.Target, "()"))
+					break
+				}
+			}
+			fmt.Fprint(w, ")")
+		}
 	case "p":
 		// Traitement des paragraphes
 		for _, n := range node.Nodes {
@@ -362,20 +392,6 @@ func (zf *file) walk(node *Node, w io.Writer) error {
 			}
 		}
 		fmt.Fprintln(w)
-	/*case "blip":
-	// Traitement des images
-	if id, ok := attr(node.Attrs, "embed"); ok {
-		for _, rel := range zf.rels.Relationship {
-			if id != rel.ID {
-				continue
-			}
-			log.Infof("Blip Image found target is: %s\n", rel.Target) // Debug
-			log.Infof("Blip Image found text %+v\n", rel)             // Debug
-			if err := zf.extract(&rel, w, ""); err != nil {
-				return err
-			}
-		}
-	}*/
 	case "pic":
 		// manage images get image and description
 		var imageDesc string
@@ -391,15 +407,15 @@ func (zf *file) walk(node *Node, w io.Writer) error {
 					//imageTitle, _ = attr(n.Attrs, "title")
 					imageDesc, _ = attr(nn.Attrs, "descr")
 				}
-				// get imgage
+				// get image
 				if nn.XMLName.Local == "blip" {
 					if id, ok := attr(nn.Attrs, "embed"); ok {
 						for _, rel := range zf.rels.Relationship {
 							if id != rel.ID {
 								continue
 							}
-							log.Infof("Blip Image found target is: %s\n", rel.Target) // Debug
-							log.Infof("Blip Image found text %+v\n", rel)             // Debug
+							log.Infof("Blip Image found target is: %s", rel.Target) // Debug
+							log.Infof("Blip Image found text %+v", rel)             // Debug
 							if err := zf.extract(&rel, w, imageDesc); err != nil {
 								return err
 							}
@@ -637,7 +653,7 @@ func GetDocx(docxPath string, url string, customerId string, exportDir string, c
 	// Add metadata header to markdown
 	markdown = metadata + markdown
 
-	exportedFile := exportDir + "/" + customerId + "-" + tools.BuildFilename(metaDatas.Title)
+	exportedFile := tools.BuildFilename(metaDatas.Title, exportDir, customerId)
 	// Écrire le Markdown dans un fichier
 	err = tools.WriteMarkdownToFile(markdown, exportedFile)
 	tools.CheckError(err)
@@ -657,7 +673,7 @@ func GetPptx(pptxPath string, url string, customerId string, exportDir string, c
 	// Add metadata header to markdown
 	markdown = metadata + markdown
 
-	exportedFile := exportDir + "/" + customerId + "-" + tools.BuildFilename(metaDatas.Title)
+	exportedFile := tools.BuildFilename(metaDatas.Title, exportDir, customerId)
 	// Écrire le Markdown dans un fichier
 	err = tools.WriteMarkdownToFile(markdown, exportedFile)
 	tools.CheckError(err)

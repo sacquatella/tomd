@@ -20,30 +20,29 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var Docx string
-var CustomerIdDocx string
+var Pptx string
+var CustomerIdPptx string
 
-//var CustomerIdDocx string
-
-var docxCmd = &cobra.Command{
-	Use:   "docx",
-	Short: "Get Docx text content as a markdown file",
-	Long:  `Get Docx text content and generate a markdown page with metadata's'.`,
-	Run:   getDocxDocument,
+var pptxCmd = &cobra.Command{
+	Use:   "pptx",
+	Short: "Get pptx text content as a markdown file",
+	Long:  `Get pptx text content and generate a markdown page with metadata's'.`,
+	Run:   getPptxDocument,
 }
 
 func init() {
-	rootCmd.AddCommand(docxCmd)
-	docxCmd.PersistentFlags().StringVarP(&Docx, "docx", "x", "", "Docx file")
-	docxCmd.PersistentFlags().StringVarP(&Url, "url", "u", "", "Page URL for metadata")
-	docxCmd.PersistentFlags().StringVarP(&CustomerIdDocx, "cid", "c", "docx", "Customer ID code ")
+	rootCmd.AddCommand(pptxCmd)
+	pptxCmd.PersistentFlags().StringVarP(&Pptx, "pptx", "s", "", "Pptx file")
+	pptxCmd.PersistentFlags().StringVarP(&Url, "url", "u", "", "Page URL for metadata")
+	pptxCmd.PersistentFlags().StringVarP(&CustomerIdPptx, "cid", "c", "pptx", "Customer ID code ")
 }
 
-// getDocxDocument read docx and generate a markdown page with its metadatas
-func getDocxDocument(cmd *cobra.Command, args []string) {
+// getPptxDocument read pptx and generate a markdown page with its metadatas
+func getPptxDocument(cmd *cobra.Command, args []string) {
 	var pages []tools.Page
-	datas, err := docx2md.GetDocx(Docx, Url, CustomerIdDocx, ExportDir, tools.Metadata{})
+	datas, err := docx2md.GetPptx(Pptx, Url, CustomerIdPptx, ExportDir, tools.Metadata{})
 	tools.CheckError(err)
 	pages = append(pages, datas)
 	tools.DisplayOnScreen(pages)
+
 }

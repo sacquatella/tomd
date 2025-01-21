@@ -275,14 +275,6 @@ func GetPage(url string, customerId string, exportDir string, complements Metada
 		return Page{}, err
 	}
 
-	// Rewrite Set content.Title without space and un lowercase
-	title := strings.ReplaceAll(doc.Find("title").Text(), " ", "-")
-
-	//title := strings.ReplaceAll(content.Find("title"), " ", "-")
-	title = strings.ReplaceAll(title, "/", "-")
-	title = strings.ReplaceAll(title, "'", "-")
-	title = strings.ToLower(title) + ".md"
-
 	// Add metadata header to markdown with title , doc_id,description , tags, site_url, authors, creation_date, last_update
 	metadata, metaDatas := BuildMetadata(doc, url, customerId, complements)
 	// Add metadata header to markdown
@@ -308,7 +300,8 @@ func GetPage(url string, customerId string, exportDir string, complements Metada
 		markdown = markdown + "\n" + imageDescriptionAsMd(imgList, lang)
 	}
 
-	exportedFile := exportDir + "/" + customerId + "-" + title
+	exportedFile := BuildFilename(metaDatas.Title, exportDir, customerId)
+
 	// save markdown to file
 	err = os.WriteFile(exportedFile, []byte(markdown), 0644)
 	if err != nil {
@@ -349,11 +342,13 @@ func DisplayOnScreen(exportedPages []Page) {
 	fmt.Println(table.Render())
 }
 
-// BuildFilename build a filename
-func BuildFilename(title string) string {
+// BuildFilename build md filename clean from special characters
+func BuildFilename(title string, dir string, id string) string {
 	title = strings.ReplaceAll(title, " ", "-")
 	title = strings.ReplaceAll(title, "/", "-")
 	title = strings.ReplaceAll(title, "'", "-")
 	title = strings.ToLower(title) + ".md"
-	return title
+	filename := dir + "/" + id + "-" + title
+
+	return filename
 }

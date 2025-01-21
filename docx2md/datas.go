@@ -132,3 +132,13 @@ type CoreProperties struct {
 	Created     string   `xml:"created"`
 	Modified    string   `xml:"modified"`
 }
+
+type DrawingML struct {
+	XMLName                xml.Name `xml:"pic"`
+	NonVisualPicProperties struct {
+		NonVisualDrawingProperties struct {
+			Title       string `xml:"title"`
+			Description string `xml:"desc"`
+		} `xml:"cNvPr"`
+	} `xml:"nvPicPr"`
+}

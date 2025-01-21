@@ -7,8 +7,6 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
-	"github.com/mattn/go-runewidth"
-	log "github.com/sirupsen/logrus"
 	"io"
 	"os"
 	"path"
@@ -16,10 +14,13 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/mattn/go-runewidth"
+	log "github.com/sirupsen/logrus"
+
 	"github.com/sacquatella/tomd/tools"
 )
 
-// UnmarshalXML
+// UnmarshalXML unmarshals the XML element into a Node.
 func (n *Node) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
 	n.Attrs = start.Attr
 	type node Node
@@ -37,16 +38,25 @@ func escape(s, set string) string {
 	return strings.NewReplacer(replacer...).Replace(s)
 }
 
-// extract
-func (zf *file) extract(rel *Relationship, w io.Writer) error {
+// extract img and générate markdown image tag with it decription
+func (zf *file) extract(rel *Relationship, w io.Writer, desc string) error {
+
+	description := strings.ReplaceAll(desc, "\n", "")
+
 	err := os.MkdirAll(filepath.Dir(rel.Target), 0755)
 	if err != nil {
 		return err
 	}
 	for _, f := range zf.r.File {
-		if f.Name != "word/"+rel.Target {
+		log.Infof("File: %s\n", f.Name)
+		log.Infof("Target: %s\n", rel.Target)
+		// replace ../ by ppt/ in rel.Target for pptx case
+		pptxTarget := strings.Replace(rel.Target, "../", "ppt/", 1)
+		if f.Name != "word/"+rel.Target && f.Name != pptxTarget {
+			log.Infof("Not Match")
 			continue
 		}
+		log.Infof("Match Found compute image Name: %s\n and rel.Target %s", f.Name, rel.Target)
 		rc, err := f.Open()
 		if err != nil {
 			return err
@@ -59,14 +69,14 @@ func (zf *file) extract(rel *Relationship, w io.Writer) error {
 			return err
 		}
 		if zf.embed {
-			fmt.Fprintf(w, "![](data:image/png;base64,%s)",
-				base64.StdEncoding.EncodeToString(b[:n]))
+			fmt.Fprintf(w, "![%s](data:image/png;base64,%s)",
+				description, base64.StdEncoding.EncodeToString(b[:n]))
 		} else {
 			err = os.WriteFile(rel.Target, b, 0644)
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(w, "![](%s)", escape(rel.Target, "()"))
+			fmt.Fprintf(w, "![%s](%s)", description, escape(rel.Target, "()"))
 		}
 		break
 	}
@@ -87,6 +97,7 @@ func attr(attrs []xml.Attr, name string) (string, bool) {
 func (zf *file) walk(node *Node, w io.Writer) error {
 	switch node.XMLName.Local {
 	case "hyperlink":
+		// Traitement des hyperliens
 		fmt.Fprint(w, "[")
 		var cbuf bytes.Buffer
 		for _, n := range node.Nodes {
@@ -108,8 +119,10 @@ func (zf *file) walk(node *Node, w io.Writer) error {
 		}
 		fmt.Fprint(w, ")")
 	case "t":
+		// Traitement du texte
 		fmt.Fprint(w, string(node.Content))
 	case "pPr":
+		// Traitement des propriétés de paragraphe
 		code := false
 		for _, n := range node.Nodes {
 			switch n.XMLName.Local {
@@ -204,6 +217,7 @@ func (zf *file) walk(node *Node, w io.Writer) error {
 			fmt.Fprint(w, "`")
 		}
 	case "tbl":
+		// Traitement des tableaux
 		var rows [][]string
 		for _, tr := range node.Nodes {
 			if tr.XMLName.Local != "tr" {
@@ -259,39 +273,65 @@ func (zf *file) walk(node *Node, w io.Writer) error {
 			}
 		}
 		for i, row := range rows {
-			if i == 0 { // Première ligne, entête
+			if i == 0 {
+				// Afficher la première ligne
 				for j := 0; j < maxcol; j++ {
 					fmt.Fprint(w, "|")
-					fmt.Fprint(w, strings.Repeat(" ", widths[j]))
+					if j < len(row) {
+						width := runewidth.StringWidth(row[j])
+						fmt.Fprint(w, escape(row[j], "|"))
+						fmt.Fprint(w, strings.Repeat(" ", widths[j]-width))
+					} else {
+						fmt.Fprint(w, strings.Repeat(" ", widths[j]))
+					}
 				}
 				fmt.Fprint(w, "|\n")
+
+				// Ligne de séparation après le header
 				for j := 0; j < maxcol; j++ {
 					fmt.Fprint(w, "|")
 					fmt.Fprint(w, strings.Repeat("-", widths[j]))
 				}
 				fmt.Fprint(w, "|\n")
-			}
-			for j := 0; j < maxcol; j++ {
-				fmt.Fprint(w, "|")
-				if j < len(row) {
-					width := runewidth.StringWidth(row[j])
-					fmt.Fprint(w, escape(row[j], "|"))
-					fmt.Fprint(w, strings.Repeat(" ", widths[j]-width))
-				} else {
-					fmt.Fprint(w, strings.Repeat(" ", widths[j]))
+			} else {
+				// Lignes normales du tableau
+				for j := 0; j < maxcol; j++ {
+					fmt.Fprint(w, "|")
+					if j < len(row) {
+						width := runewidth.StringWidth(row[j])
+						fmt.Fprint(w, escape(row[j], "|"))
+						fmt.Fprint(w, strings.Repeat(" ", widths[j]-width))
+					} else {
+						fmt.Fprint(w, strings.Repeat(" ", widths[j]))
+					}
 				}
+				fmt.Fprint(w, "|\n")
 			}
-			fmt.Fprint(w, "|\n")
 		}
 		fmt.Fprint(w, "\n")
 	case "r":
+		// Traitement des chaines en gras, italique et barré
 		bold := false
 		italic := false
 		strike := false
+		link := false
+		RelationId := ""
 		for _, n := range node.Nodes {
 			if n.XMLName.Local != "rPr" {
 				continue
 			}
+			// Loop arround subnode XMLName to get bold, italic and strike for pptx context
+			if _, exist := attr(n.Attrs, "b"); exist {
+				bold = true
+			}
+			if _, exist := attr(n.Attrs, "i"); exist {
+				italic = true
+			}
+			if _, exist := attr(n.Attrs, "strike"); exist {
+				strike = true
+			}
+
+			// Loop arround subnode XMLName to get bold, italic and strike for docx context
 			for _, nn := range n.Nodes {
 				switch nn.XMLName.Local {
 				case "b":
@@ -300,6 +340,9 @@ func (zf *file) walk(node *Node, w io.Writer) error {
 					italic = true
 				case "strike":
 					strike = true
+				case "hlinkClick":
+					link = true
+					RelationId, _ = attr(nn.Attrs, "id")
 				}
 			}
 		}
@@ -311,6 +354,9 @@ func (zf *file) walk(node *Node, w io.Writer) error {
 		}
 		if italic {
 			fmt.Fprint(w, "*")
+		}
+		if link {
+			fmt.Fprint(w, "[")
 		}
 		var cbuf bytes.Buffer
 		for _, n := range node.Nodes {
@@ -318,7 +364,7 @@ func (zf *file) walk(node *Node, w io.Writer) error {
 				return err
 			}
 		}
-		fmt.Fprint(w, escape(cbuf.String(), `*~\`))
+		fmt.Fprint(w, escape(cbuf.String(), `*~[\`))
 		if italic {
 			fmt.Fprint(w, "*")
 		}
@@ -328,26 +374,61 @@ func (zf *file) walk(node *Node, w io.Writer) error {
 		if strike {
 			fmt.Fprint(w, "~~")
 		}
+		if link {
+			fmt.Fprint(w, "](")
+			for _, rel := range zf.rels.Relationship {
+				if RelationId == rel.ID {
+					fmt.Fprint(w, escape(rel.Target, "()"))
+					break
+				}
+			}
+			fmt.Fprint(w, ")")
+		}
 	case "p":
+		// Traitement des paragraphes
 		for _, n := range node.Nodes {
 			if err := zf.walk(&n, w); err != nil {
 				return err
 			}
 		}
 		fmt.Fprintln(w)
-	case "blip":
-		if id, ok := attr(node.Attrs, "embed"); ok {
-			for _, rel := range zf.rels.Relationship {
-				if id != rel.ID {
-					continue
+	case "pic":
+		// manage images get image and description
+		var imageDesc string
+		for _, n := range node.Nodes {
+			if n.XMLName.Local != "blipFill" && n.XMLName.Local != "nvPicPr" {
+				continue
+			}
+			// loop arround subnode
+			for _, nn := range n.Nodes {
+				//var imageTitle, imageDesc string
+				// get description
+				if nn.XMLName.Local == "cNvPr" {
+					//imageTitle, _ = attr(n.Attrs, "title")
+					imageDesc, _ = attr(nn.Attrs, "descr")
 				}
-				if err := zf.extract(&rel, w); err != nil {
-					return err
+				// get image
+				if nn.XMLName.Local == "blip" {
+					if id, ok := attr(nn.Attrs, "embed"); ok {
+						for _, rel := range zf.rels.Relationship {
+							if id != rel.ID {
+								continue
+							}
+							log.Infof("Blip Image found target is: %s", rel.Target) // Debug
+							log.Infof("Blip Image found text %+v", rel)             // Debug
+							if err := zf.extract(&rel, w, imageDesc); err != nil {
+								return err
+							}
+						}
+					}
 				}
 			}
+
 		}
 	case "Fallback":
+		// Traitement des fallback
 	case "txbxContent":
+		// Traitement du contenu des boîtes de texte
 		var cbuf bytes.Buffer
 		for _, n := range node.Nodes {
 			if err := zf.walk(&n, &cbuf); err != nil {
@@ -481,6 +562,85 @@ func Docx2md(arg string, embed bool) (string, tools.Metadata, error) {
 	return buf.String(), meta, nil
 }
 
+// Pptx2md convert a pptx file to markdown and add metadata header
+func Pptx2md(pptxPath string, embed bool) (string, tools.Metadata, error) {
+	// Ouvrir le fichier PPTX
+	r, err := zip.OpenReader(pptxPath)
+	if err != nil {
+		return "", tools.Metadata{}, err
+	}
+	defer r.Close()
+
+	// Initialiser les variables pour les relations et les propriétés
+	var rels Relationships
+	var prop CoreProperties
+
+	// Lire les fichiers nécessaires dans le fichier PPTX
+	for _, f := range r.File {
+		log.Debugf("File: %s\n", f.Name)
+		switch f.Name {
+		//case "ppt/_rels/presentation.xml.rels", "ppt/slides/_rels/slide*.xml.rels":
+		//case "ppt/slides/_rels/slide*.xml.rels":
+		case "ppt/slides/_rels/slide1.xml.rels", "ppt/slides/_rels/slide2.xml.rels", "ppt/slides/_rels/slide3.xml.rels":
+			rc, err := f.Open()
+			defer rc.Close()
+			if err != nil {
+				return "", tools.Metadata{}, err
+			}
+			b, _ := io.ReadAll(rc)
+			err = xml.Unmarshal(b, &rels)
+			if err != nil {
+				return "", tools.Metadata{}, err
+			}
+		case "docProps/core.xml":
+			rc, err := f.Open()
+			defer rc.Close()
+			if err != nil {
+				return "", tools.Metadata{}, err
+			}
+			b, _ := io.ReadAll(rc)
+			err = xml.Unmarshal(b, &prop)
+			if err != nil {
+				return "", tools.Metadata{}, err
+			}
+		}
+	}
+
+	// Parcourir tous les fichiers de slides
+	var buf bytes.Buffer
+	for i := 1; ; i++ {
+		slideName := fmt.Sprintf("ppt/slides/slide%d.xml", i)
+		f := findFile(r.File, slideName)
+		if f == nil {
+			break
+		}
+		node, err := readFile(f)
+		if err != nil {
+			return "", tools.Metadata{}, err
+		}
+
+		// Convertir le contenu en Markdown
+		zf := &file{
+			r:     r,
+			rels:  rels,
+			embed: false,
+			list:  make(map[string]int),
+		}
+		err = zf.walk(node, &buf)
+		if err != nil {
+			return "", tools.Metadata{}, err
+		}
+		buf.WriteString("\n---\n") // Séparateur entre les slides
+	}
+
+	// Ajouter les métadonnées
+	var authors []string
+	meta := tools.Metadata{Title: prop.Title, Description: prop.Description, Authors: append(authors, prop.Creator)}
+	markdown := buf.String()
+
+	return markdown, meta, nil
+}
+
 // GetDocx convert a docx file to markdown and add metadata header
 func GetDocx(docxPath string, url string, customerId string, exportDir string, complements tools.Metadata) (tools.Page, error) {
 
@@ -493,7 +653,27 @@ func GetDocx(docxPath string, url string, customerId string, exportDir string, c
 	// Add metadata header to markdown
 	markdown = metadata + markdown
 
-	exportedFile := exportDir + "/" + customerId + "-" + tools.BuildFilename(metaDatas.Title)
+	exportedFile := tools.BuildFilename(metaDatas.Title, exportDir, customerId)
+	// Écrire le Markdown dans un fichier
+	err = tools.WriteMarkdownToFile(markdown, exportedFile)
+	tools.CheckError(err)
+
+	return tools.Page{PageId: metaDatas.Doc_id, Url: metaDatas.Site_url, MdFile: exportedFile}, nil
+}
+
+// GetPptx convert a pptx file to markdown and add metadata header
+func GetPptx(pptxPath string, url string, customerId string, exportDir string, complements tools.Metadata) (tools.Page, error) {
+
+	markdown, meta, err := Pptx2md(pptxPath, false)
+	tools.CheckError(err)
+
+	// Add metadata header to markdown with title , doc_id,description , tags, site_url, authors, creation_date, last_update
+	metadata, metaDatas := tools.BuildFileMetadata(pptxPath, url, customerId, meta, complements)
+
+	// Add metadata header to markdown
+	markdown = metadata + markdown
+
+	exportedFile := tools.BuildFilename(metaDatas.Title, exportDir, customerId)
 	// Écrire le Markdown dans un fichier
 	err = tools.WriteMarkdownToFile(markdown, exportedFile)
 	tools.CheckError(err)

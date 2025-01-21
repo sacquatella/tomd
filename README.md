@@ -1,11 +1,38 @@
 # toMD
 
-Simple golang cli to convert a web page or a set of web pages to markdown format.
-The cli is also able to extract text from a PDF file or a DOCX file and convert it to markdown format.
+Simple golang cli to convert various documents to markdown format. It first version support :
+
+- HTML page 
+- PDF file
+- Docx file
+- Pptx file
+
+The cli can convert a single file or a list of files. It can also use [ollama](https://ollama.com) to describe images in markdown file (only HTML for the moment).
+
+The conversion generates metadata header with the following fields :
+
+```markdown
+---
+title: <title>
+doc_id: <id>
+description: <description>
+tags: 
+- file
+site_url: <doc-url>
+authors: 
+- me
+creation_date: 2025-01-13T18:15:24
+last_update_date: 2025-01-13T18:15:24
+visibility: Internal
+```
+
+These metadata's fields are generated from document information and can be overriden with a json file.
+
 
 ## Usage
 
-Get web page as a markdown file
+Get a web page as a markdown file
+
 ```shell
 $ tomd page -f <file-url> -d <directory>
 ```
@@ -32,9 +59,13 @@ $ tomd pdf -f <pdf-file> -d <directory>
 
 Extract DOCX text as markdown file (basic text extraction)
 ```shell
-$ tomd docx -f <docx-file> -d <directory>
+$ tomd docx -d <docx-file> -d <directory>
 ```
 
+Extract PPTX text as markdown file (basic text extraction)
+```shell
+$ tomd pptx -p <docx-file> -d <directory>
+```
 
 ## Options 
 
@@ -51,6 +82,7 @@ Available Commands:
   help        Help about any command
   page        Get a web page as a markdown file
   pdf         Get PDF text content as a markdown file
+  pptx        Get pptx text content as a markdown file
   version     Provide tomd version and build number
 
 Flags:

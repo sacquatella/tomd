@@ -24,6 +24,8 @@ import (
 	"github.com/abadojack/whatlanggo"
 	"github.com/apcera/termtables"
 	log "github.com/sirupsen/logrus"
+	"golang.org/x/text/transform"
+	"golang.org/x/text/unicode/norm"
 	"io"
 	"net/http"
 	"os"
@@ -32,6 +34,7 @@ import (
 	"runtime"
 	"strings"
 	"time"
+	"unicode"
 )
 
 var Insecure bool
@@ -73,6 +76,23 @@ func BuildMetadata(content *goquery.Document, url string, prefix string, complem
 	// Build doc_id as TITLE in UPPERCASE WITHOUT SPACE
 	// set doc_id as prefix + "_" + content.ID
 	doc_id := strings.ReplaceAll(strings.ToUpper(metaData.Title), " ", "")
+	// replace accentuated characters with their non-accentuated equivalent
+	doc_id = strings.NewReplacer("À", "A", "Á", "A", "Â", "A", "Ã", "A", "Ä", "A",
+		"Å", "A", "Æ", "AE", "Ç", "C", "È", "E", "É", "E",
+		"Ê", "E", "Ë", "E", "Ì", "I", "Í", "I", "Î", "I",
+		"Ï", "I", "Ð", "D", "Ñ", "N", "Ò", "O", "Ó", "O",
+		"Ô", "O", "Õ", "O", "Ö", "O", "Ø", "O", "Ù", "U",
+		"Ú", "U", "Û", "U", "Ü", "U", "Ý", "Y", "Þ", "TH",
+		"ß", "ss", "à", "a", "á", "a", "â", "a", "ã", "a",
+		"ä", "a", "å", "a", "æ", "ae", "ç", "c", "è", "e",
+		"é", "e", "ê", "e", "ë", "e", "ì", "i", "í", "i",
+		"î", "i", "ï", "i", "ð", "d", "ñ", "n", "ò", "o",
+		"ó", "o", "ô", "o", "õ", "o", "ö", "o", "ø", "o",
+		"ù", "u", "ú", "u", "û", "u", "ü", "u", "ý", "y",
+		"þ", "th", "ÿ", "y").Replace(doc_id)
+	// remove all special characters except alphanumeric and underscore
+	doc_id = regexp.MustCompile(`[^a-zA-Z0-9_]`).ReplaceAllString(doc_id, "")
+	// set doc_id as prefix + "_" + content.ID
 	metaData.Doc_id = strings.ToUpper(prefix + "_" + doc_id)
 	//
 	// override description if complement.description is not empty
@@ -244,6 +264,10 @@ func GetPage(url string, customerId string, exportDir string, complements Metada
 		}
 		webpageReader, err := http.Get(url)
 		CheckError(err)
+		if webpageReader.StatusCode != http.StatusOK {
+			log.Errorf("Error fetching URL %s: %s", url, webpageReader.Status)
+			return Page{PageId: "Error", Url: url, MdFile: webpageReader.Status}, nil
+		}
 		grReader = io.Reader(webpageReader.Body)
 		defer webpageReader.Body.Close()
 	} else {
@@ -344,11 +368,53 @@ func DisplayOnScreen(exportedPages []Page) {
 
 // BuildFilename build md filename clean from special characters
 func BuildFilename(title string, dir string, id string) string {
-	title = strings.ReplaceAll(title, " ", "-")
-	title = strings.ReplaceAll(title, "/", "-")
-	title = strings.ReplaceAll(title, "'", "-")
+
+	title = SanitizeFilename(title)
+
 	title = strings.ToLower(title) + ".md"
 	filename := dir + "/" + id + "-" + title
+
+	return filename
+}
+
+// removeAccents remove accents from a string
+func removeAccents(s string) string {
+	t := transform.Chain(norm.NFD, transform.RemoveFunc(isMn), norm.NFC)
+	result, _, _ := transform.String(t, s)
+	return result
+}
+
+// isMn filters characters of type "Mark, nonspacing" (accents).
+func isMn(r rune) bool {
+	return unicode.Is(unicode.Mn, r)
+}
+
+// SanitizeFilename clean a filename by removing special characters, replacing spaces with hyphens, and removing accents
+func SanitizeFilename(filename string) string {
+
+	// Replace long dashes (EN DASH –, EM DASH —) with a simple dash
+	filename = strings.ReplaceAll(filename, "–", "-")
+	filename = strings.ReplaceAll(filename, "—", "-")
+
+	// Remove forbidden characters + quotes + backticks + apostrophes
+	re := regexp.MustCompile(`[<>:"/\\|?*'\x60"\x00-\x1F]`)
+	filename = re.ReplaceAllString(filename, "")
+
+	// Replace spaces with hyphens
+	filename = strings.ReplaceAll(filename, " ", "-")
+
+	// Reduces multiple dashes to a single dash
+	reDash := regexp.MustCompile(`-+`)
+	filename = reDash.ReplaceAllString(filename, "-")
+
+	// Removes accents
+	filename = removeAccents(filename)
+
+	// Set to lower case
+	filename = strings.ToLower(filename)
+
+	// remove leading and trailing dashes
+	filename = strings.Trim(filename, "-")
 
 	return filename
 }

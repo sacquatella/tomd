@@ -18,12 +18,6 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	md "github.com/JohannesKaufmann/html-to-markdown"
-	"github.com/JohannesKaufmann/html-to-markdown/plugin"
-	"github.com/PuerkitoBio/goquery"
-	"github.com/abadojack/whatlanggo"
-	"github.com/apcera/termtables"
-	log "github.com/sirupsen/logrus"
 	"io"
 	"net/http"
 	"os"
@@ -32,6 +26,15 @@ import (
 	"runtime"
 	"strings"
 	"time"
+	"unicode"
+
+	md "github.com/JohannesKaufmann/html-to-markdown"
+	"github.com/JohannesKaufmann/html-to-markdown/plugin"
+	"github.com/PuerkitoBio/goquery"
+	"github.com/abadojack/whatlanggo"
+	"github.com/apcera/termtables"
+	log "github.com/sirupsen/logrus"
+	"golang.org/x/text/unicode/norm"
 )
 
 var Insecure bool
@@ -72,7 +75,10 @@ func BuildMetadata(content *goquery.Document, url string, prefix string, complem
 
 	// Build doc_id as TITLE in UPPERCASE WITHOUT SPACE
 	// set doc_id as prefix + "_" + content.ID
-	doc_id := strings.ReplaceAll(strings.ToUpper(metaData.Title), " ", "")
+	doc_id := strings.ReplaceAll(metaData.Title, " ", "")
+	doc_id = RemoveAccents(doc_id)
+	doc_id = ReplaceAllMultipleChars(doc_id)
+	doc_id = RemoveSpecialChars(doc_id)
 	metaData.Doc_id = strings.ToUpper(prefix + "_" + doc_id)
 	//
 	// override description if complement.description is not empty
@@ -162,7 +168,10 @@ func BuildFileMetadata(docpath string, url string, prefix string, meta Metadata,
 
 	// Build doc_id as TITLE in UPPERCASE WITHOUT SPACE
 	// set doc_id as prefix + "_" + content.ID
-	doc_id := strings.ReplaceAll(strings.ToUpper(metaData.Title), " ", "")
+	doc_id := strings.ReplaceAll(metaData.Title, " ", "")
+	doc_id = RemoveAccents(doc_id)
+	doc_id = ReplaceAllMultipleChars(doc_id)
+	doc_id = RemoveSpecialChars(doc_id)
 	metaData.Doc_id = strings.ToUpper(prefix + "_" + doc_id)
 
 	// Add metadata header to markdown with title , doc_id,description , tags, site_url, authors, creation_date, last_update
@@ -347,8 +356,54 @@ func BuildFilename(title string, dir string, id string) string {
 	title = strings.ReplaceAll(title, " ", "-")
 	title = strings.ReplaceAll(title, "/", "-")
 	title = strings.ReplaceAll(title, "'", "-")
+
+	title = RemoveAccents(title)
+	title = ReplaceAllMultipleChars(title)
+	title = RemoveSpecialChars(title)
+
+	// passe le titre en minuscule et ajoute l'extension .md
 	title = strings.ToLower(title) + ".md"
 	filename := dir + "/" + id + "-" + title
 
 	return filename
+}
+
+// RemoveAccents remove accents from a string
+func RemoveAccents(s string) string {
+	// transform to NFD unicode format
+	t := norm.NFD.String(s)
+	// non associated characters are in the Mn unicode category
+	// we remove all characters in this category
+	return strings.Map(func(r rune) rune {
+		if unicode.Is(unicode.Mn, r) {
+			return -1
+		}
+		return r
+	}, t)
+}
+
+// ReplaceAllMultipleChars replace all multiple consecutive characters by a single character
+// for example "aa---bb__cc==dd" becomes "a-b_c=d"
+func ReplaceAllMultipleChars(s string) string {
+	if len(s) == 0 {
+		return s
+	}
+	runes := []rune(s)
+	result := []rune{runes[0]}
+	for _, r := range runes[1:] {
+		if r != result[len(result)-1] {
+			result = append(result, r)
+		}
+	}
+	return string(result)
+}
+
+func RemoveSpecialChars(s string) string {
+	// remove all special characters except letters, numbers, hyphens and underscores
+	reg, err := regexp.Compile("[^a-zA-Z0-9-_]+")
+	if err != nil {
+		log.Fatal(err)
+	}
+	s = reg.ReplaceAllString(s, "")
+	return s
 }

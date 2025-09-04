@@ -34,3 +34,12 @@ func TestBuildFilename_EmptyTitle(t *testing.T) {
 		t.Errorf("expected %s, got %s", expected, result)
 	}
 }
+
+func TestReplaceAllMultipleChars_RemovesConsecutiveChars(t *testing.T) {
+	input := "aa---bb__cc==dd"
+	expected := "a-b_c=d"
+	result := ReplaceAllMultipleChars(input)
+	if result != expected {
+		t.Errorf("expected %s, got %s", expected, result)
+	}
+}

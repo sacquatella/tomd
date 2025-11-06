@@ -30,6 +30,7 @@ func GetPDF(pdfPath string, url string, customerId string, exportDir string, com
 }
 
 // ExtractTextFromPDF extract text from a PDF.
+// @todo: rewrite with https://github.com/ledongthuc/pdf lib. The current lib is not maintained anymore.
 func ExtractTextFromPDF(pdfPath string) (string, error) {
 	// Ouvrir le fichier PDF
 	file, err := os.Open(pdfPath)

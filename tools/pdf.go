@@ -19,7 +19,9 @@ func GetPDF(pdfPath string, url string, customerId string, exportDir string, com
 	// Add metadata header to markdown
 	markdown = metadata + markdown
 
-	exportedFile := exportDir + "/" + customerId + "-" + metaDatas.Title + ".md"
+	//exportedFile := exportDir + "/" + customerId + "-" + metaDatas.Title + ".md"
+	exportedFile := BuildFilename(metaDatas.Title, exportDir, customerId)
+
 	// Écrire le Markdown dans un fichier
 	err = WriteMarkdownToFile(markdown, exportedFile)
 	CheckError(err)

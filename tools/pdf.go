@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/rsc/pdf"
+	log "github.com/sirupsen/logrus"
 )
 
 func GetPDF(pdfPath string, url string, customerId string, exportDir string, complements Metadata) (Page, error) {
@@ -56,7 +57,7 @@ func ExtractTextFromPDF(pdfPath string) (string, error) {
 		}
 
 		text := page.V.RawString()
-		fmt.Printf("Page %d : %s\n", i, text)
+		log.Debugf("Page %d : %s\n", i, text)
 
 		textBuilder.WriteString(fmt.Sprintf("# Page %d\n\n", i)) //  Add Title for each page
 

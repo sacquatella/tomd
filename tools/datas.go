@@ -48,3 +48,11 @@ type Page struct {
 	Title  string
 	Url    string
 }
+
+// AuthConfig contains authentication configuration for web requests
+type AuthConfig struct {
+	Username string
+	Password string
+	Token    string
+	AuthType string // "basic", "bearer", or "ntlm"
+}

@@ -240,6 +240,11 @@ func GetImgList(content *goquery.Document, ispath string, scheme string, domain 
 
 // GetPage get a web page by it url and return a Page struct
 func GetPage(url string, customerId string, exportDir string, complements Metadata, domain string, ia bool) (Page, error) {
+	return GetPageWithAuth(url, customerId, exportDir, complements, domain, ia, nil)
+}
+
+// GetPageWithAuth get a web page by it url with authentication and return a Page struct
+func GetPageWithAuth(url string, customerId string, exportDir string, complements Metadata, domain string, ia bool, auth *AuthConfig) (Page, error) {
 
 	var grReader io.Reader
 	var err error
@@ -247,11 +252,47 @@ func GetPage(url string, customerId string, exportDir string, complements Metada
 
 	// Get web page content from url or local file
 	if strings.HasPrefix(url, "http") {
-		// Check is option -k is set, and if yes, don't check certificate
-		if Insecure {
-			http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+		// Create HTTP client with proper configuration
+		transport := &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: Insecure},
 		}
-		webpageReader, err := http.Get(url)
+		client := &http.Client{
+			Transport: transport,
+		}
+
+		// Create HTTP request
+		req, err := http.NewRequest("GET", url, nil)
+		CheckError(err)
+
+		// Add authentication if provided
+		if auth != nil {
+			switch auth.AuthType {
+			case "basic":
+				if auth.Username != "" && auth.Password != "" {
+					req.SetBasicAuth(auth.Username, auth.Password)
+				}
+			case "bearer":
+				if auth.Token != "" {
+					req.Header.Add("Authorization", "Bearer "+auth.Token)
+				}
+			case "ntlm":
+				// For NTLM (SharePoint), use basic auth as fallback
+				// Note: Full NTLM support may require additional libraries
+				if auth.Username != "" && auth.Password != "" {
+					req.SetBasicAuth(auth.Username, auth.Password)
+				}
+			default:
+				// Default to basic auth if username/password provided
+				if auth.Username != "" && auth.Password != "" {
+					req.SetBasicAuth(auth.Username, auth.Password)
+				} else if auth.Token != "" {
+					req.Header.Add("Authorization", "Bearer "+auth.Token)
+				}
+			}
+		}
+
+		// Execute request
+		webpageReader, err := client.Do(req)
 		CheckError(err)
 		grReader = io.Reader(webpageReader.Body)
 		defer webpageReader.Body.Close()

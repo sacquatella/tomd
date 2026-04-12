@@ -7,7 +7,7 @@ Simple golang cli to convert various documents to markdown format. It first vers
 - Docx file
 - Pptx file
 
-The cli can convert a single file or a list of files. It can also use [ollama](https://ollama.com) to describe images in markdown file (only HTML for the moment).
+The cli can convert a single file or a list of files. It can also use an IA provider to describe images in markdown file (only HTML for the moment).
 
 The conversion generates metadata header with the following fields :
 
@@ -88,19 +88,39 @@ Available Commands:
 Flags:
   -d, --dir string   Export page(s) folder, default is current folder (default ".")
   -h, --help         help for tomd
-  -i, --ia           Use IA for image description
-  -v, --verbose      write debug logs in log-tomd.log file
+      --ia-model string      IA model override, default depends on selected provider
+      --ia-provider string   IA provider to use: ollama or openai (default "ollama")
+  -i, --ia                  Use IA for image description
+  -v, --verbose             write debug logs in log-tomd.log file
 
 Use "tomd [command] --help" for more information about a command.
 ```
 
-If `-i` option is used, `ollama` and llm `llava:7b` are used to describe images at the end of the markdown file.
+If `-i` option is used, the default IA provider is `ollama` with model `llava:7b`.
 So do not forget to install [ollama](https://ollama.com) and to pull `llava:7b` with `ollama pull llava:7b` before using this option.
 
-You can use another model by setting `TOMD_MODEL` env variable with your target models.
+You can select another provider with `--ia-provider` or `TOMD_AI_PROVIDER`.
+Supported values are `ollama` and `openai`.
+
+You can override the model with `--ia-model` or `TOMD_MODEL`.
 
 ```shell
-$ export TOMD_MODEL=llama3.2-vision:latest  tomd page -f <file-url> -d <directory> -i
+$ export TOMD_MODEL=llama3.2-vision:latest
+$ tomd page -f <file-url> -d <directory> -i
+```
+
+For OpenAI, set your API key in `TOMD_OPENAI_API_KEY`. The default OpenAI model is `gpt-4.1-mini`.
+
+```shell
+$ export TOMD_AI_PROVIDER=openai
+$ export TOMD_OPENAI_API_KEY=<your-api-key>
+$ tomd page -f <file-url> -d <directory> -i
+```
+
+You can also override the OpenAI endpoint with `TOMD_OPENAI_BASE_URL` if needed.
+
+```shell
+$ tomd page -f <file-url> -d <directory> -i --ia-provider openai --ia-model gpt-4.1-mini
 ```
 
 ## Build

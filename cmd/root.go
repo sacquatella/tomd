@@ -18,11 +18,14 @@ import (
 	"fmt"
 	"github.com/sacquatella/tomd/tools"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"os"
 )
 
 var Verbose bool
 var ImgDesc bool
+var AIProvider string
+var AIModel string
 var CustomerId string
 var ExportDir string
 
@@ -56,4 +59,9 @@ func init() {
 	rootCmd.PersistentFlags().BoolVarP(&Verbose, "verbose", "v", false, "write debug logs in log-tomd.log file")
 	rootCmd.PersistentFlags().StringVarP(&ExportDir, "dir", "d", ".", "Export page(s) folder, default is current folder")
 	rootCmd.PersistentFlags().BoolVarP(&ImgDesc, "ia", "i", false, "Use IA for image description")
+	rootCmd.PersistentFlags().StringVar(&AIProvider, "ia-provider", "ollama", "IA provider to use: ollama or openai")
+	rootCmd.PersistentFlags().StringVar(&AIModel, "ia-model", "", "IA model override, default depends on selected provider")
+
+	_ = viper.BindPFlag("AIProvider", rootCmd.PersistentFlags().Lookup("ia-provider"))
+	_ = viper.BindPFlag("Model", rootCmd.PersistentFlags().Lookup("ia-model"))
 }

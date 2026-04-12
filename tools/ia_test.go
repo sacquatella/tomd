@@ -14,7 +14,43 @@
 
 package tools
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
+
+func TestResolveModel(t *testing.T) {
+	tests := []struct {
+		name     string
+		provider string
+		model    string
+		want     string
+	}{
+		{name: "explicit model wins", provider: "openai", model: "gpt-5-mini", want: "gpt-5-mini"},
+		{name: "openai default model", provider: "openai", model: "", want: "gpt-5-mini"},
+		{name: "ollama default model", provider: "ollama", model: "", want: "llava:7b"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := resolveModel(tt.provider, tt.model)
+			if got != tt.want {
+				t.Fatalf("resolveModel(%q, %q) = %q, want %q", tt.provider, tt.model, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDataURLForLocalImage(t *testing.T) {
+	got, err := dataURLForLocalImage("../samples/valid_img.jpeg")
+	if err != nil {
+		t.Fatalf("dataURLForLocalImage returned error: %v", err)
+	}
+
+	if !strings.HasPrefix(got, "data:image/jpeg;base64,") {
+		t.Fatalf("unexpected data URL prefix: %s", got[:32])
+	}
+}
 
 // TestDescribeImg_Bacic test the DescribeImg function (ollama shoud run localy to pass this test)
 func TestDescribeImg_Bacic(t *testing.T) {

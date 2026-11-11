@@ -9,7 +9,7 @@ Simple golang cli to convert various documents to markdown format. It first vers
 
 ![AI-Assisted](https://img.shields.io/badge/Development-Human%20%2B%20AI-blue)
 
-The CLI can convert a single file or a list of files. HTML and PPTX image descriptions can optionally use [Ollama](https://ollama.com) or OpenAI. All local processing is Go: no LibreOffice, Python, external executable or additional Go dependency is needed.
+The CLI can convert a single file or a list of files. HTML and PPTX image descriptions can optionally use [Ollama](https://ollama.com) or OpenAI. All local processing is Go: no LibreOffice, Python or external executable is needed.
 
 The conversion generates metadata header with the following fields :
 
@@ -54,10 +54,19 @@ with :
 ]
 ```
 
-Extract PDF text as markdown file (basic text extraction)
+Extract PDF content as a Markdown file
 ```shell
-$ tomd pdf -f <pdf-file> -d <directory>
+$ tomd pdf -p <pdf-file> -d <directory>
 ```
+
+### PDF Export
+
+- Heading levels are inferred from font size, bold fonts and section numbering. Page boundaries use HTML comments (`<!-- Page 1 -->`), not artificial Markdown headings.
+- Positioned text is grouped into paragraphs. Wrapped lines are joined, common ligatures normalized and line-end word hyphenation removed. Two-column layouts are read column by column when a consistent gutter is detected.
+- Embedded raster images are decoded with pdfcpu and exported under `<markdown-stem>-assets/`, alongside the Markdown. Links are relative, filenames are content-hashed and repeated images share the same asset. Image positions, nested forms and supported transparency masks are retained.
+- Image-only pages retain their image links. `ExtractTextFromPDF` remains a text-only API; the `pdf` command exports both text and images.
+
+Limitations: PDF structure is inferred, not guaranteed. Unusual fonts, tables, multi-column layouts and overlapping text may require manual correction. Vector drawings, clipping, inline images and arbitrary page rotations are not rendered; unsupported image encodings may not be extracted. There is no OCR, so scanned text remains inside the exported image. `--ia` does not describe PDF images.
 
 Extract DOCX text as markdown file (basic text extraction)
 ```shell

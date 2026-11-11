@@ -15,6 +15,8 @@
 package cmd
 
 import (
+	"fmt"
+
 	"github.com/sacquatella/tomd/docx2md"
 	"github.com/sacquatella/tomd/tools"
 	"github.com/spf13/cobra"
@@ -22,12 +24,15 @@ import (
 
 var Pptx string
 var CustomerIdPptx string
+var pptxExcludeNotes bool
+var pptxExcludeHidden bool
+var pptxLanguage string
 
 var pptxCmd = &cobra.Command{
 	Use:   "pptx",
-	Short: "Get pptx text content as a markdown file",
-	Long:  `Get pptx text content and generate a markdown page with metadata's'.`,
-	Run:   getPptxDocument,
+	Short: "Extract PPTX content as RAG-ready Markdown",
+	Long:  `Extract ordered slides, notes, tables, images and native diagram data. Optional image descriptions use Ollama or OpenAI.`,
+	RunE:  getPptxDocument,
 }
 
 func init() {
@@ -35,14 +40,30 @@ func init() {
 	pptxCmd.PersistentFlags().StringVarP(&Pptx, "pptx", "s", "", "Pptx file")
 	pptxCmd.PersistentFlags().StringVarP(&Url, "url", "u", "", "Page URL for metadata")
 	pptxCmd.PersistentFlags().StringVarP(&CustomerIdPptx, "cid", "c", "pptx", "Customer ID code ")
+	pptxCmd.Flags().BoolVar(&pptxExcludeNotes, "no-notes", false, "Exclude presenter notes")
+	pptxCmd.Flags().BoolVar(&pptxExcludeHidden, "exclude-hidden", false, "Exclude hidden slides (included by default)")
+	pptxCmd.Flags().StringVar(&pptxLanguage, "language", "", "Language for AI descriptions (default: source document language)")
+	_ = pptxCmd.MarkPersistentFlagRequired("pptx")
 }
 
 // getPptxDocument read pptx and generate a markdown page with its metadatas
-func getPptxDocument(cmd *cobra.Command, args []string) {
-	var pages []tools.Page
-	datas, err := docx2md.GetPptx(Pptx, Url, CustomerIdPptx, ExportDir, tools.Metadata{})
-	tools.CheckError(err)
-	pages = append(pages, datas)
-	tools.DisplayOnScreen(pages)
-
+func getPptxDocument(cmd *cobra.Command, args []string) error {
+	options := docx2md.PptxOptions{
+		ExcludeNotes: pptxExcludeNotes, ExcludeHidden: pptxExcludeHidden,
+		Language: pptxLanguage, Context: cmd.Context(),
+		Warn: func(message string) { fmt.Fprintln(cmd.ErrOrStderr(), "Warning: "+message) },
+	}
+	if ImgDesc {
+		describer, err := tools.NewImageDescriber(tools.AIConfigFromEnv())
+		if err != nil {
+			return err
+		}
+		options.Describer = describer
+	}
+	datas, err := docx2md.GetPptxWithOptions(Pptx, Url, CustomerIdPptx, ExportDir, tools.Metadata{}, options)
+	if err != nil {
+		return err
+	}
+	tools.DisplayOnScreen([]tools.Page{datas})
+	return nil
 }

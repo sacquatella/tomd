@@ -7,6 +7,8 @@ Simple golang cli to convert various documents to markdown format. It first vers
 - Docx file
 - Pptx file
 
+![AI-Assisted](https://img.shields.io/badge/Development-Human%20%2B%20AI-blue)
+
 The CLI can convert a single file or a list of files. HTML and PPTX image descriptions can optionally use [Ollama](https://ollama.com) or OpenAI. All local processing is Go: no LibreOffice, Python, external executable or additional Go dependency is needed.
 
 The conversion generates metadata header with the following fields :

@@ -3,10 +3,15 @@ package tools
 import (
 	"bytes"
 	"compress/zlib"
+	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"image"
 	"image/color"
 	"image/jpeg"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -293,5 +298,99 @@ func TestGetPDF_WriteError(t *testing.T) {
 	path := writeTestPDF(t, "5 0 R", "BT /F1 12 Tf 72 720 Td (Hello) Tj ET")
 	if _, err := GetPDF(path, "", "pdf", exportDir, Metadata{}); err == nil {
 		t.Fatal("expected Markdown write error")
+	}
+}
+
+func TestGetPDFWithOptions_AI(t *testing.T) {
+	for _, test := range []struct {
+		name, provider string
+		enabled, fail  bool
+	}{
+		{name: "disabled", provider: "ollama"},
+		{name: "ollama", provider: "ollama", enabled: true},
+		{name: "openai", provider: "openai", enabled: true},
+		{name: "failure", provider: "ollama", enabled: true, fail: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			calls := 0
+			server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+				calls++
+				var payload struct {
+					Prompt   string `json:"prompt"`
+					Messages []struct {
+						Content []struct {
+							Text string `json:"text"`
+						} `json:"content"`
+					} `json:"messages"`
+				}
+				if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
+					t.Error(err)
+				}
+				prompt := payload.Prompt
+				if test.provider == "openai" && len(payload.Messages) > 0 && len(payload.Messages[0].Content) > 0 {
+					prompt = payload.Messages[0].Content[0].Text
+				}
+				if !strings.Contains(prompt, "French") || !strings.Contains(prompt, "Page 1") || !strings.Contains(prompt, "Titre One") {
+					t.Errorf("missing language or PDF context: %s", prompt)
+				}
+				if test.fail {
+					writer.WriteHeader(http.StatusUnauthorized)
+					return
+				}
+				if test.provider == "openai" {
+					fmt.Fprint(writer, `{"choices":[{"message":{"content":"Description du schema."}}]}`)
+				} else {
+					fmt.Fprint(writer, `{"response":"Description du schema."}`)
+				}
+			}))
+			defer server.Close()
+			options := PDFOptions{Language: "French"}
+			var warnings []string
+			options.Warn = func(message string) { warnings = append(warnings, message) }
+			if test.enabled {
+				describer, err := NewImageDescriber(AIConfig{Provider: test.provider, Model: "vision-test", APIKey: "test-key", BaseURL: server.URL})
+				if err != nil {
+					t.Fatal(err)
+				}
+				options.Describer = describer
+			}
+			page, err := GetPDFWithOptions("../samples/test.pdf", "", "pdf", t.TempDir(), Metadata{}, options)
+			if err != nil {
+				t.Fatal(err)
+			}
+			data, err := os.ReadFile(page.MdFile)
+			if err != nil {
+				t.Fatal(err)
+			}
+			markdown := string(data)
+			if !strings.Contains(markdown, "# Titre One") || strings.Count(markdown, "![Image]") != 2 {
+				t.Fatalf("native content missing: %s", markdown)
+			}
+			if !test.enabled {
+				if calls != 0 || strings.Contains(markdown, "AI-generated") {
+					t.Fatal("AI was used while disabled")
+				}
+			} else if test.fail {
+				if calls == 0 || len(warnings) == 0 || strings.Count(markdown, "AI-generated description unavailable; native content retained.") != 2 {
+					t.Fatalf("missing AI failure fallback: calls=%d, warnings=%v, markdown=%s", calls, warnings, markdown)
+				}
+			} else if calls != 1 || len(warnings) != 0 || strings.Count(markdown, "AI-generated visual description:\n\nDescription du schema.") != 2 {
+				t.Fatalf("missing descriptions or cache: calls=%d, warnings=%v, markdown=%s", calls, warnings, markdown)
+			}
+		})
+	}
+}
+
+func TestGetPDFWithOptions_Canceled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	exportDir := t.TempDir()
+	_, err := GetPDFWithOptions("../samples/test.pdf", "", "pdf", exportDir, Metadata{}, PDFOptions{Context: ctx})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected cancellation, got %v", err)
+	}
+	entries, err := os.ReadDir(exportDir)
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("expected no files after cancellation, got %v, %v", entries, err)
 	}
 }

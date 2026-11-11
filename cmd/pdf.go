@@ -15,18 +15,21 @@
 package cmd
 
 import (
+	"fmt"
+
 	"github.com/sacquatella/tomd/tools"
 	"github.com/spf13/cobra"
 )
 
 var Pdf string
 var CustomerIdPdf string
+var pdfLanguage string
 
 var pdfCmd = &cobra.Command{
 	Use:   "pdf",
 	Short: "Get PDF text content as a markdown file",
 	Long:  `Get PDF text content and generate a markdown page with metadata's'.`,
-	Run:   getPdfDocument,
+	RunE:  getPdfDocument,
 }
 
 func init() {
@@ -34,14 +37,26 @@ func init() {
 	pdfCmd.PersistentFlags().StringVarP(&Pdf, "pdf", "p", "", "Pdf file")
 	pdfCmd.PersistentFlags().StringVarP(&Url, "url", "u", "", "Page URL for metadata")
 	pdfCmd.PersistentFlags().StringVarP(&CustomerIdPdf, "cid", "c", "pdf", "Customer ID code ")
+	pdfCmd.Flags().StringVar(&pdfLanguage, "language", "", "Language for AI descriptions (default: source document language)")
 }
 
 // getWebPage get a web page by its id and generate a markdown page with its metadatas
-func getPdfDocument(cmd *cobra.Command, args []string) {
-	var pages []tools.Page
-	datas, err := tools.GetPDF(Pdf, Url, CustomerIdPdf, ExportDir, tools.Metadata{})
-	tools.CheckError(err)
-	pages = append(pages, datas)
-	tools.DisplayOnScreen(pages)
-
+func getPdfDocument(cmd *cobra.Command, args []string) error {
+	options := tools.PDFOptions{
+		Language: pdfLanguage, Context: cmd.Context(),
+		Warn: func(message string) { fmt.Fprintln(cmd.ErrOrStderr(), "Warning: "+message) },
+	}
+	if ImgDesc {
+		describer, err := tools.NewImageDescriber(tools.AIConfigFromEnv())
+		if err != nil {
+			return err
+		}
+		options.Describer = describer
+	}
+	datas, err := tools.GetPDFWithOptions(Pdf, Url, CustomerIdPdf, ExportDir, tools.Metadata{}, options)
+	if err != nil {
+		return err
+	}
+	tools.DisplayOnScreen([]tools.Page{datas})
+	return nil
 }

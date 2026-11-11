@@ -8,6 +8,7 @@ import (
 	"image/png"
 	"io"
 	"math"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -21,10 +22,47 @@ import (
 
 type pdfImage struct {
 	name, filename, link string
+	description          string
 	object               int
 	data                 []byte
 	x, right, y          float64
 	positioned           bool
+}
+
+func describePDFImages(images []pdfImage, texts []pdf.Text, pageNumber int, options PDFOptions) ([]pdfImage, error) {
+	if options.Describer == nil {
+		return images, nil
+	}
+	contextText := []rune(renderPDFText(texts))
+	if len(contextText) > 4000 {
+		contextText = contextText[:4000]
+	}
+	for index := range images {
+		if err := options.Context.Err(); err != nil {
+			return nil, err
+		}
+		resource := &images[index]
+		description, err := options.Describer.Describe(options.Context, resource.data, http.DetectContentType(resource.data), options.Language,
+			fmt.Sprintf("Page %d\n%s", pageNumber, string(contextText)))
+		if contextErr := options.Context.Err(); contextErr != nil {
+			return nil, contextErr
+		}
+		if err != nil || strings.TrimSpace(description) == "" {
+			options.Warn(fmt.Sprintf("page %d: AI image description unavailable for %s", pageNumber, resource.filename))
+			resource.description = "AI-generated description unavailable; native content retained."
+		} else {
+			resource.description = "AI-generated visual description:\n\n" + strings.TrimSpace(description)
+		}
+	}
+	return images, nil
+}
+
+func (resource pdfImage) markdown() string {
+	text := "![Image](" + resource.link + ")"
+	if resource.description != "" {
+		text += "\n\n" + resource.description
+	}
+	return text
 }
 
 func readPDFImages(pdfPath, assetsPrefix string) (images map[int][]pdfImage, err error) {

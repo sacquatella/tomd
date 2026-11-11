@@ -179,7 +179,7 @@ func renderPDFContent(texts []pdf.Text, images []pdfImage) string {
 	lines, bodySize := pdfTextLines(texts)
 	var unplaced []string
 	for _, resource := range images {
-		link := "![Image](" + resource.link + ")"
+		link := resource.markdown()
 		if resource.positioned {
 			lines = append(lines, pdfLine{text: link, x: resource.x, right: resource.right, y: resource.y, image: true})
 		} else {

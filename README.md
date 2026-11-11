@@ -9,7 +9,7 @@ Simple golang cli to convert various documents to markdown format. It first vers
 
 ![AI-Assisted](https://img.shields.io/badge/Development-Human%20%2B%20AI-blue)
 
-The CLI can convert a single file or a list of files. HTML and PPTX image descriptions can optionally use [Ollama](https://ollama.com) or OpenAI. All local processing is Go: no LibreOffice, Python or external executable is needed.
+The CLI can convert a single file or a list of files. HTML, PDF and PPTX image descriptions can optionally use [Ollama](https://ollama.com) or OpenAI. All local processing is Go: no LibreOffice, Python or external executable is needed.
 
 The conversion generates metadata header with the following fields :
 
@@ -65,8 +65,13 @@ $ tomd pdf -p <pdf-file> -d <directory>
 - Positioned text is grouped into paragraphs. Wrapped lines are joined, common ligatures normalized and line-end word hyphenation removed. Two-column layouts are read column by column when a consistent gutter is detected.
 - Embedded raster images are decoded with pdfcpu and exported under `<markdown-stem>-assets/`, alongside the Markdown. Links are relative, filenames are content-hashed and repeated images share the same asset. Image positions, nested forms and supported transparency masks are retained.
 - Image-only pages retain their image links. `ExtractTextFromPDF` remains a text-only API; the `pdf` command exports both text and images.
+- `--ia` adds clearly labeled AI-generated descriptions immediately below extracted raster images and diagrams, using the page text as context. `--language French` sets the description language; otherwise the source language is requested. The same Ollama/OpenAI configuration and in-memory cache as PPTX are used. AI failures issue warnings and retain native images and text.
 
-Limitations: PDF structure is inferred, not guaranteed. Unusual fonts, tables, multi-column layouts and overlapping text may require manual correction. Vector drawings, clipping, inline images and arbitrary page rotations are not rendered; unsupported image encodings may not be extracted. There is no OCR, so scanned text remains inside the exported image. `--ia` does not describe PDF images.
+```shell
+tomd pdf -p document.pdf -d output --ia --language French
+```
+
+Limitations: PDF structure is inferred, not guaranteed. Unusual fonts, tables, multi-column layouts and overlapping text may require manual correction. Vector drawings, clipping, inline images and arbitrary page rotations are not rendered; unsupported image encodings may not be extracted or described. There is no OCR, so scanned text remains inside the exported image; AI descriptions are separate generated content, not a replacement for source text.
 
 Extract DOCX text as markdown file (basic text extraction)
 ```shell
@@ -118,7 +123,7 @@ Flags:
 Use "tomd [command] --help" for more information about a command.
 ```
 
-### Optional AI providers (HTML and PPTX)
+### Optional AI providers (HTML, PDF and PPTX)
 
 No AI request is made without `--ia`. Ollama remains the default provider, with `llava:7b` as its default model. The Ollama service must be reachable and have the selected model installed; it is not required for native extraction.
 

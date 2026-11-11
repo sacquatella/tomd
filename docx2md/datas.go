@@ -100,11 +100,15 @@ type Numbering struct {
 }
 
 type file struct {
-	rels  Relationships
-	num   Numbering
-	r     *zip.ReadCloser
-	embed bool
-	list  map[string]int
+	rels        Relationships
+	num         Numbering
+	r           *zip.ReadCloser
+	embed       bool
+	list        map[string]int
+	opts        DocxOptions
+	owner       string
+	headings    map[string]int
+	contextText string
 }
 
 // Node is

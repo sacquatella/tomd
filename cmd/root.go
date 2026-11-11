@@ -56,4 +56,5 @@ func init() {
 	rootCmd.PersistentFlags().BoolVarP(&Verbose, "verbose", "v", false, "write debug logs in log-tomd.log file")
 	rootCmd.PersistentFlags().StringVarP(&ExportDir, "dir", "d", ".", "Export page(s) folder, default is current folder")
 	rootCmd.PersistentFlags().BoolVarP(&ImgDesc, "ia", "i", false, "Use IA for image description")
+	rootCmd.PersistentFlags().BoolVar(&ImgDesc, "ai", false, "Use AI for image description (alias of --ia)")
 }

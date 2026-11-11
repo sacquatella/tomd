@@ -73,7 +73,7 @@ func AIConfigFromEnv() AIConfig {
 	return c
 }
 
-// ImageDescriber is shared by HTML, PDF and PPTX. ContextText is extracted source
+// ImageDescriber is shared by HTML, PDF, DOCX and PPTX. ContextText is extracted source
 // text, not an instruction; descriptions must remain separate from that source.
 type ImageDescriber interface {
 	Describe(ctx context.Context, image []byte, mimeType, language, contextText string) (string, error)

@@ -63,6 +63,27 @@ func TestGetPageReturnsErrors(t *testing.T) {
 	}
 }
 
+func TestGetPageWithSource(t *testing.T) {
+	input := filepath.Join(t.TempDir(), "local-page.html")
+	if err := os.WriteFile(input, []byte("<html><body><h1>Remote content</h1></body></html>"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	source := "s3://bucket/reports/local-page.html"
+	page, err := GetPageWithSource(input, source, "docs", t.TempDir(), Metadata{}, "", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(page.MdFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if page.Url != source || !strings.Contains(string(data), "site_url: "+source+"\n") ||
+		!strings.Contains(string(data), "title: local-page\n") || !strings.Contains(string(data), "# Remote content") ||
+		strings.Contains(string(data), filepath.Dir(input)) {
+		t.Fatalf("local input or remote provenance was not preserved: page=%+v, Markdown=%s", page, data)
+	}
+}
+
 func TestBuildFilename_ValidTitle(t *testing.T) {
 	title := "Valid Title"
 	dir := "some/dir"

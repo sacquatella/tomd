@@ -54,6 +54,31 @@ tomd docs ./documents -d ./markdown --recursive
 tomd docs ./documents -d ./markdown -r --cid project --ia --language French
 ```
 
+### S3 Conversion
+
+`docs` also accepts AWS S3 and S3-compatible buckets. Exports always stay local under `--dir`:
+
+```shell
+# All supported documents in a bucket, including nested prefixes
+tomd docs s3://my-bucket -d ./markdown --recursive
+
+# Export paths relative to documents/, not the bucket root
+tomd docs s3://my-bucket/documents/ -d ./markdown -r
+
+# Custom S3 service, for example MinIO
+tomd docs s3://my-bucket/documents/ -d ./markdown -r \
+  --s3-endpoint https://s3.example.com --s3-region us-east-1 --s3-path-style
+```
+
+- Authentication uses the AWS SDK's standard credential chain: environment variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, optional `AWS_SESSION_TOKEN`), shared credentials/config files, `AWS_PROFILE`, or workload IAM roles. No AWS CLI installation or credential arguments are needed. Configure the region with standard AWS configuration (for example `AWS_REGION`) or `--s3-region`; it is required, including for custom endpoints.
+- `--s3-endpoint` overrides the service endpoint. HTTPS is recommended. `--s3-path-style` enables path-style addressing for services such as MinIO; the default uses the SDK's standard addressing rules. The configured endpoint receives signed requests, so use a trusted service.
+- Bucket listing is paginated. Without `-r`, only objects directly under the selected prefix are processed. With `-r`, all nested prefixes are included. `s3://my-bucket/documents` and `s3://my-bucket/documents/` both select the directory-like `documents/` prefix, not an exact object or an arbitrary string prefix. URL-escape reserved characters such as `#`, `?` and `%` in source URLs.
+- Supported extensions are the same as local directory conversion. Directory-marker objects and unsupported files are skipped. Each selected object is downloaded to a private temporary directory, converted, then removed; only one document is staged at a time. Listing does not freeze object contents: an object can change between listing and download.
+- For `s3://my-bucket/documents/team/report.pdf`, using the `documents/` source prefix produces `markdown/team/report.pdf.tomd/<generated-name>.md`. The metadata and final results table retain the original escaped `s3://` object URL, not its temporary local path.
+- Existing destinations are never overwritten. Object keys that cannot be mapped safely to a portable local path (including traversal, backslashes, control characters, reserved Windows names and invalid path components) fail individually. Symlinked output ancestors are refused. Download/conversion failures do not stop the remaining objects, but any failure returns a nonzero exit status. Temporary downloads are cleaned up; failed conversions can leave incomplete export directories as with local inputs.
+- Permissions normally required are `s3:ListBucket` for the selected prefix and `s3:GetObject` for the objects. SSE-KMS encrypted objects can also require `kms:Decrypt`.
+- HTML sidecar images and linked documents are not fetched from S3 or rebased; these exports may contain unresolved relative links, and S3-relative HTML images are unavailable for AI descriptions. PDF/DOCX/PPTX embedded assets are handled as usual. With `--ia`, supported images and surrounding document content from private buckets may be sent to the configured AI provider; omit that option for native-only extraction.
+
 Get a web page as a markdown file
 
 ```shell

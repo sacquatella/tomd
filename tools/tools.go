@@ -240,7 +240,12 @@ func GetImgList(content *goquery.Document, ispath string, scheme string, domain 
 
 // GetPage get a web page by it url and return a Page struct
 func GetPage(url string, customerId string, exportDir string, complements Metadata, domain string, ia bool) (Page, error) {
+	return GetPageWithSource(url, url, customerId, exportDir, complements, domain, ia)
+}
 
+// GetPageWithSource reads HTML from location and records sourceURL as its provenance.
+func GetPageWithSource(location, sourceURL, customerId, exportDir string, complements Metadata, domain string, ia bool) (Page, error) {
+	url := location
 	var grReader io.Reader
 	var err error
 	var isPath string
@@ -293,7 +298,7 @@ func GetPage(url string, customerId string, exportDir string, complements Metada
 	markdown := converter.Convert(content)
 
 	// Add metadata header to markdown with title , doc_id,description , tags, site_url, authors, creation_date, last_update
-	metadata, metaDatas := BuildMetadata(doc, url, customerId, complements)
+	metadata, metaDatas := BuildMetadata(doc, sourceURL, customerId, complements)
 	// Add metadata header to markdown
 	markdown = metadata + markdown
 

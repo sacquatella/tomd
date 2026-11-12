@@ -33,14 +33,16 @@ These metadata's fields are generated from document information and can be overr
 
 ## Usage
 
-### Directory Conversion
 
-Convert all supported files in a directory, optionally including subdirectories:
+Convert all supported files (html, docx, pptx, pdf )in a directory, optionally including subdirectories:
 
 ```shell
 tomd docs ./documents -d ./markdown
 tomd docs ./documents -d ./markdown --recursive
 ```
+
+<details>
+<summary>Directory Conversion</summary>
 
 - Supported extensions: `.html`, `.htm`, `.pdf`, `.docx`, `.pptx` (case-insensitive). Legacy `.doc` and `.docs` are not supported. Other files and symbolic links are ignored.
 - Without `-r` / `--recursive`, only files directly in the source directory are processed. A nested export directory is excluded from recursive traversal.
@@ -54,7 +56,10 @@ tomd docs ./documents -d ./markdown --recursive
 tomd docs ./documents -d ./markdown -r --cid project --ia --language French
 ```
 
-### S3 Conversion
+</details>
+
+<details>
+<summary>S3 Conversion</summary>
 
 `docs` also accepts AWS S3 and S3-compatible buckets. Exports always stay local under `--dir`:
 
@@ -79,6 +84,8 @@ tomd docs s3://my-bucket/documents/ -d ./markdown -r \
 - Permissions normally required are `s3:ListBucket` for the selected prefix and `s3:GetObject` for the objects. SSE-KMS encrypted objects can also require `kms:Decrypt`.
 - HTML sidecar images and linked documents are not fetched from S3 or rebased; these exports may contain unresolved relative links, and S3-relative HTML images are unavailable for AI descriptions. PDF/DOCX/PPTX embedded assets are handled as usual. With `--ia`, supported images and surrounding document content from private buckets may be sent to the configured AI provider; omit that option for native-only extraction.
 
+</details></br>
+
 Get a web page as a markdown file
 
 ```shell
@@ -100,12 +107,16 @@ with :
 ]
 ```
 
-Extract PDF content as a Markdown file
+Convert PDF content as a Markdown file
+
 ```shell
 $ tomd pdf -p <pdf-file> -d <directory>
 ```
 
-### PDF Export
+<details>
+
+<summary>PDF convertion</summary>
+
 
 - Heading levels are inferred from font size, bold fonts and section numbering. Page boundaries use HTML comments (`<!-- Page 1 -->`), not artificial Markdown headings.
 - Positioned text is grouped into paragraphs. Wrapped lines are joined, common ligatures normalized and line-end word hyphenation removed. Two-column layouts are read column by column when a consistent gutter is detected.
@@ -119,13 +130,19 @@ tomd pdf -p document.pdf -d output --ia --language French
 ```
 
 Limitations: PDF structure is inferred, not guaranteed. Unusual fonts, tables, multi-column layouts and overlapping text may require manual correction. Vector drawings, clipping, inline images and arbitrary page rotations are not rendered; unsupported image encodings may not be extracted or described. There is no OCR, so scanned text remains inside the exported image; AI descriptions are separate generated content, not a replacement for source text.
+</details></br>
 
-Extract DOCX content as a Markdown file
+
+Convert DOCX content as a Markdown file
+
 ```shell
 $ tomd docx -x document.docx -d output
 ```
 
-### DOCX Export
+<details>
+
+<summary>DOCX convertion</summary>
+ 
 
 - Paragraphs, heading styles (including inherited styles and outline levels 1–6), bold/italic/strikethrough text, links, nested lists and tables are converted to Markdown. XML entities are decoded; line breaks and multiline table cells are preserved. Deleted revisions and field instructions are omitted; inserted text is retained.
 - Embedded images, including legacy VML images and image-based diagrams, are exported under `<markdown-stem>-assets/` alongside the Markdown. Links are relative, filenames are content-hashed, and repeated images share the same asset. Source alternative text is preserved. External images are never fetched.
@@ -138,12 +155,19 @@ tomd docx -x document.docx -d output --ai --language French
 
 Limitations: DOCX conversion is not a Word renderer. Complex merged tables, advanced numbering, headers/footers, footnotes, embedded objects and page layout are not fully reproduced. Native SmartArt/charts/vector diagrams are not rendered as images for AI analysis; embedded raster previews can be described when present. SVG/EMF/WMF and other unsupported vision formats remain exported but are not rasterized or sent to the model. Supported vision formats are PNG/JPEG/GIF/WebP. AI descriptions may be inaccurate and are not source facts.
 
-Extract PPTX content as RAG-ready Markdown
+</details></br>
+
+
+Convert PPTX content as RAG-ready Markdown
+
 ```shell
 $ tomd pptx -s presentation.pptx -d output
 ```
 
-### PPTX for RAG
+<details>
+
+<summary>PPTX convertion (for RAG)</summary>
+
 
 - Slides follow the presentation's actual order, including reordered or nonconsecutive slide parts.
 - Each slide contains its source filename, presentation number and package-part ID, plus an anchor. Block IDs are emitted as HTML comments (`<!-- block: slide1-3 -->`). Keep these when your indexer needs block-level provenance; retain slide source information when chunking.
@@ -154,7 +178,10 @@ $ tomd pptx -s presentation.pptx -d output
 - `--ia` adds clearly labeled AI-generated image descriptions with surrounding slide/notes context. `--language French` selects a description language; by default the provider is asked to use the source language. Original text is never replaced by an AI summary.
 - AI failures issue warnings and retain native extraction. Descriptions are cached in memory for the duration of a conversion (image, language and context must match). Requests have a 90-second total deadline and at most two retries for HTTP 429/5xx.
 
-Limitations: there is no complete PowerPoint renderer or OCR engine. Native diagrams are analyzed structurally, not sent as screenshots. Raster images (PNG/JPEG/GIF/WebP) can be described by a compatible vision model; SVG/EMF/WMF remain exported but are not rasterized. Shape order follows XML order, which may differ from visual reading order. Linked workbooks, animations, embedded objects, arbitrary inherited layout content and complex chart layouts are not rendered/evaluated. Unsupported graphic objects and missing data produce warnings. AI descriptions can be inaccurate and should be treated as generated evidence, not source facts.
+>Limitations: there is no complete PowerPoint renderer or OCR engine. Native diagrams are analyzed structurally, not sent as screenshots. Raster images (PNG/JPEG/GIF/WebP) can be described by a compatible vision model; SVG/EMF/WMF remain exported but are not rasterized. Shape order follows XML order, which may differ from visual reading order. Linked workbooks, animations, embedded objects, arbitrary inherited layout content and complex chart layouts are not rendered/evaluated. Unsupported graphic objects and missing data produce warnings. AI descriptions can be inaccurate and should be treated as generated evidence, not source facts.
+
+</details></br>
+
 
 ## Options 
 

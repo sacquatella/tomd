@@ -8,6 +8,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -42,41 +44,39 @@ func escape(s, set string) string {
 func (zf *file) extract(rel *Relationship, w io.Writer, desc string) error {
 
 	description := strings.ReplaceAll(desc, "\n", "")
-
-	err := os.MkdirAll(filepath.Dir(rel.Target), 0755)
-	if err != nil {
-		return err
+	if strings.EqualFold(rel.TargetMode, "External") || !fs.ValidPath(rel.Target) ||
+		strings.ContainsAny(rel.Target, `\:`) {
+		return fmt.Errorf("unsafe image relationship target %q", rel.Target)
 	}
 	for _, f := range zf.r.File {
-		log.Infof("File: %s\n", f.Name)
-		log.Infof("Target: %s\n", rel.Target)
-		// replace ../ by ppt/ in rel.Target for pptx case
-		pptxTarget := strings.Replace(rel.Target, "../", "ppt/", 1)
-		if f.Name != "word/"+rel.Target && f.Name != pptxTarget {
-			log.Infof("Not Match")
+		if f.Name != "word/"+rel.Target {
 			continue
 		}
-		log.Infof("Match Found compute image Name: %s\n and rel.Target %s", f.Name, rel.Target)
 		rc, err := f.Open()
 		if err != nil {
 			return err
 		}
 		defer rc.Close()
 
-		b := make([]byte, f.UncompressedSize64)
-		n, err := rc.Read(b)
-		if err != nil && err != io.EOF {
+		b, err := io.ReadAll(rc)
+		if err != nil {
 			return err
 		}
 		if zf.embed {
 			fmt.Fprintf(w, "![%s](data:image/png;base64,%s)",
-				description, base64.StdEncoding.EncodeToString(b[:n]))
+				description, base64.StdEncoding.EncodeToString(b))
 		} else {
-			err = os.WriteFile(rel.Target, b, 0644)
+			target := filepath.Join(zf.assetDir, filepath.FromSlash(rel.Target))
+			output := filepath.Join(zf.outputDir, target)
+			if err := os.MkdirAll(filepath.Dir(output), 0755); err != nil {
+				return err
+			}
+			err = os.WriteFile(output, b, 0644)
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(w, "![%s](%s)", description, escape(rel.Target, "()"))
+			link := (&url.URL{Path: filepath.ToSlash(target)}).EscapedPath()
+			fmt.Fprintf(w, "![%s](%s)", description, escape(link, "()"))
 		}
 		break
 	}
@@ -358,13 +358,18 @@ func (zf *file) walk(node *Node, w io.Writer) error {
 		if link {
 			fmt.Fprint(w, "[")
 		}
-		var cbuf bytes.Buffer
 		for _, n := range node.Nodes {
+			var cbuf bytes.Buffer
 			if err := zf.walk(&n, &cbuf); err != nil {
 				return err
 			}
+			if n.XMLName.Local == "drawing" || n.XMLName.Local == "pic" {
+				// Image Markdown must not be escaped as literal run text.
+				fmt.Fprint(w, cbuf.String())
+			} else {
+				fmt.Fprint(w, escape(cbuf.String(), `*~[\`))
+			}
 		}
-		fmt.Fprint(w, escape(cbuf.String(), `*~[\`))
 		if italic {
 			fmt.Fprint(w, "*")
 		}
@@ -449,20 +454,25 @@ func (zf *file) walk(node *Node, w io.Writer) error {
 
 // readFile
 func readFile(f *zip.File) (*Node, error) {
-	rc, err := f.Open()
-	defer rc.Close()
-
-	b, _ := io.ReadAll(rc)
-	if err != nil {
-		return nil, err
-	}
-
 	var node Node
-	err = xml.Unmarshal(b, &node)
-	if err != nil {
+	if err := readZipXML(f, &node); err != nil {
 		return nil, err
 	}
 	return &node, nil
+}
+
+func readZipXML(f *zip.File, v any) error {
+	rc, err := f.Open()
+	if err != nil {
+		return err
+	}
+	defer rc.Close()
+
+	b, err := io.ReadAll(rc)
+	if err != nil {
+		return err
+	}
+	return xml.Unmarshal(b, v)
 }
 
 func findFile(files []*zip.File, target string) *zip.File {
@@ -476,7 +486,10 @@ func findFile(files []*zip.File, target string) *zip.File {
 
 // Docx2md return a markdown string from a docx file
 func Docx2md(arg string, embed bool) (string, tools.Metadata, error) {
+	return docx2md(arg, embed, ".", "")
+}
 
+func docx2md(arg string, embed bool, outputDir, assetDir string) (string, tools.Metadata, error) {
 	r, err := zip.OpenReader(arg)
 	if err != nil {
 		return "", tools.Metadata{}, err
@@ -490,42 +503,15 @@ func Docx2md(arg string, embed bool) (string, tools.Metadata, error) {
 	for _, f := range r.File {
 		switch f.Name {
 		case "word/_rels/document.xml.rels", "word/_rels/document2.xml.rels":
-			rc, err := f.Open()
-			defer rc.Close()
-
-			b, _ := io.ReadAll(rc)
-			if err != nil {
-				return "", tools.Metadata{}, err
-			}
-
-			err = xml.Unmarshal(b, &rels)
-			if err != nil {
+			if err := readZipXML(f, &rels); err != nil {
 				return "", tools.Metadata{}, err
 			}
 		case "word/numbering.xml":
-			rc, err := f.Open()
-			defer rc.Close()
-
-			b, _ := io.ReadAll(rc)
-			if err != nil {
-				return "", tools.Metadata{}, err
-			}
-
-			err = xml.Unmarshal(b, &num)
-			if err != nil {
+			if err := readZipXML(f, &num); err != nil {
 				return "", tools.Metadata{}, err
 			}
 		case "docProps/core.xml":
-			rc, err := f.Open()
-			defer rc.Close()
-
-			b, _ := io.ReadAll(rc)
-			if err != nil {
-				return "", tools.Metadata{}, err
-			}
-
-			err = xml.Unmarshal(b, &prop)
-			if err != nil {
+			if err := readZipXML(f, &prop); err != nil {
 				return "", tools.Metadata{}, err
 			}
 
@@ -543,11 +529,13 @@ func Docx2md(arg string, embed bool) (string, tools.Metadata, error) {
 
 	var buf bytes.Buffer
 	zf := &file{
-		r:     r,
-		rels:  rels,
-		num:   num,
-		embed: embed,
-		list:  make(map[string]int),
+		r:         r,
+		rels:      rels,
+		num:       num,
+		embed:     embed,
+		list:      make(map[string]int),
+		outputDir: outputDir,
+		assetDir:  assetDir,
 	}
 	err = zf.walk(node, &buf)
 	if err != nil {
@@ -565,8 +553,11 @@ func Docx2md(arg string, embed bool) (string, tools.Metadata, error) {
 // GetDocx convert a docx file to markdown and add metadata header
 func GetDocx(docxPath string, url string, customerId string, exportDir string, complements tools.Metadata) (tools.Page, error) {
 
-	markdown, meta, err := Docx2md(docxPath, false)
-	tools.CheckError(err)
+	stem := strings.TrimSuffix(filepath.Base(docxPath), filepath.Ext(docxPath))
+	markdown, meta, err := docx2md(docxPath, false, exportDir, stem+"-assets")
+	if err != nil {
+		return tools.Page{}, err
+	}
 
 	// Add metadata header to markdown with title , doc_id,description , tags, site_url, authors, creation_date, last_update
 	metadata, metaDatas := tools.BuildFileMetadata(docxPath, url, customerId, meta, complements)
@@ -577,7 +568,9 @@ func GetDocx(docxPath string, url string, customerId string, exportDir string, c
 	exportedFile := tools.BuildFilename(metaDatas.Title, exportDir, customerId)
 	// Écrire le Markdown dans un fichier
 	err = tools.WriteMarkdownToFile(markdown, exportedFile)
-	tools.CheckError(err)
+	if err != nil {
+		return tools.Page{}, err
+	}
 
 	return tools.Page{PageId: metaDatas.Doc_id, Url: metaDatas.Site_url, MdFile: exportedFile}, nil
 }

@@ -42,6 +42,10 @@ func describePDFImages(images []pdfImage, texts []pdf.Text, pageNumber int, opti
 			return nil, err
 		}
 		resource := &images[index]
+		if filepath.Ext(resource.filename) == ".jpx" {
+			options.Warn(fmt.Sprintf("page %d: JPEG 2000 image %s retained in its original format; AI description unavailable (unsupported format)", pageNumber, resource.filename))
+			continue
+		}
 		description, err := options.Describer.Describe(options.Context, resource.data, http.DetectContentType(resource.data), options.Language,
 			fmt.Sprintf("Page %d\n%s", pageNumber, string(contextText)))
 		if contextErr := options.Context.Err(); contextErr != nil {
@@ -59,6 +63,9 @@ func describePDFImages(images []pdfImage, texts []pdf.Text, pageNumber int, opti
 
 func (resource pdfImage) markdown() string {
 	text := "![Image](" + resource.link + ")"
+	if filepath.Ext(resource.filename) == ".jpx" {
+		text = "[Image (JPEG 2000, original .jpx)](" + resource.link + ")"
+	}
 	if resource.description != "" {
 		text += "\n\n" + resource.description
 	}
@@ -92,7 +99,8 @@ func readPDFImages(pdfPath, assetsPrefix string) (images map[int][]pdfImage, err
 			return fmt.Errorf("PDF image on page %d exceeds 64 MiB", resource.PageNr)
 		}
 		ext := strings.ToLower(resource.FileType)
-		if ext != "png" && ext != "jpg" && ext != "jpeg" && ext != "webp" {
+		// pdfcpu returns JPEG 2000 streams unchanged; retain them without a decoder.
+		if ext != "png" && ext != "jpg" && ext != "jpeg" && ext != "webp" && ext != "jpx" {
 			decoded, _, err := image.Decode(bytes.NewReader(data))
 			if err != nil {
 				return fmt.Errorf("decode PDF image on page %d: %w", resource.PageNr, err)

@@ -1,6 +1,88 @@
 package tools
 
-import "testing"
+import (
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+func TestGetPageLocalTitleFallback(t *testing.T) {
+	for _, tt := range []struct {
+		name, title, override, want string
+	}{
+		{"missing title", "", "", "local-page"},
+		{"blank title", "  ", "", "local-page"},
+		{"document title", "Document title", "", "Document title"},
+		{"override", "Document title", "Override title", "Override title"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			input := filepath.Join(t.TempDir(), "local-page.html")
+			if err := os.WriteFile(input, []byte("<html><head><title>"+tt.title+"</title></head><body><h1>Content</h1></body></html>"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			page, err := GetPage(input, "docs", t.TempDir(), Metadata{Title: tt.override}, "", false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			data, err := os.ReadFile(page.MdFile)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(string(data), "title: "+tt.want+"\n") || !strings.Contains(string(data), "# Content") {
+				t.Fatalf("unexpected Markdown: %s", data)
+			}
+		})
+	}
+}
+
+func TestGetPageReturnsErrors(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := GetPage(filepath.Join(dir, "missing.html"), "docs", dir, Metadata{}, "", false); err == nil {
+		t.Fatal("expected missing input error")
+	}
+	input := filepath.Join(dir, "input.html")
+	if err := os.WriteFile(input, []byte("<html><body>Content</body></html>"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := GetPage(input, "docs", filepath.Join(dir, "missing-output"), Metadata{}, "", false); err == nil {
+		t.Fatal("expected write error")
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer server.Close()
+	if _, err := GetPage(server.URL, "docs", dir, Metadata{}, "", false); err == nil {
+		t.Fatal("expected HTTP status error")
+	}
+	server.Close()
+	if _, err := GetPage(server.URL, "docs", dir, Metadata{}, "", false); err == nil {
+		t.Fatal("expected HTTP connection error")
+	}
+}
+
+func TestGetPageWithSource(t *testing.T) {
+	input := filepath.Join(t.TempDir(), "local-page.html")
+	if err := os.WriteFile(input, []byte("<html><body><h1>Remote content</h1></body></html>"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	source := "s3://bucket/reports/local-page.html"
+	page, err := GetPageWithSource(input, source, "docs", t.TempDir(), Metadata{}, "", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(page.MdFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if page.Url != source || !strings.Contains(string(data), "site_url: "+source+"\n") ||
+		!strings.Contains(string(data), "title: local-page\n") || !strings.Contains(string(data), "# Remote content") ||
+		strings.Contains(string(data), filepath.Dir(input)) {
+		t.Fatalf("local input or remote provenance was not preserved: page=%+v, Markdown=%s", page, data)
+	}
+}
 
 func TestBuildFilename_ValidTitle(t *testing.T) {
 	title := "Valid Title"

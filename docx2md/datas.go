@@ -100,11 +100,13 @@ type Numbering struct {
 }
 
 type file struct {
-	rels  Relationships
-	num   Numbering
-	r     *zip.ReadCloser
-	embed bool
-	list  map[string]int
+	rels      Relationships
+	num       Numbering
+	r         *zip.ReadCloser
+	embed     bool
+	list      map[string]int
+	outputDir string
+	assetDir  string
 }
 
 // Node is

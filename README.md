@@ -33,6 +33,27 @@ These metadata's fields are generated from document information and can be overr
 
 ## Usage
 
+### Directory Conversion
+
+Convert all supported files in a directory, optionally including subdirectories:
+
+```shell
+tomd docs ./documents -d ./markdown
+tomd docs ./documents -d ./markdown --recursive
+```
+
+- Supported extensions: `.html`, `.htm`, `.pdf`, `.docx`, `.pptx` (case-insensitive). Legacy `.doc` and `.docs` are not supported. Other files and symbolic links are ignored.
+- Without `-r` / `--recursive`, only files directly in the source directory are processed. A nested export directory is excluded from recursive traversal.
+- Each source has its own output directory, including its extension and a `.tomd` suffix: `documents/reports/annual.pdf` becomes `markdown/reports/annual.pdf.tomd/<generated-name>.md`. Document titles and existing metadata conventions are retained. Untitled HTML files use their filename stem as the title.
+- The default export directory is `.`. Exporting into the source directory is supported. Existing per-file destination directories are refused rather than overwritten, even on a second run. Choose a new export directory or remove the relevant generated directory before retrying.
+- Conversion continues after individual file errors. A final table lists successful exports with `Page ID`, `Url` (local source path) and `Markdown files`, followed by conversion/error totals; any error produces a nonzero exit status. Failed conversions can leave an incomplete output directory and assets behind.
+- PDF, DOCX and PPTX extracted images stay alongside their Markdown with relative links. Local HTML image links are not copied or rebased, so HTML exports are not necessarily self-contained.
+- `-c` / `--cid` sets the metadata/file prefix (default `docs`; letters, numbers, underscores and hyphens only). `--ia` enables the existing HTML/PDF/PPTX image descriptions. `--language` selects the PDF/PPTX description language; HTML uses its detected language. `--no-notes` and `--exclude-hidden` apply to PPTX files.
+
+```shell
+tomd docs ./documents -d ./markdown -r --cid project --ia --language French
+```
+
 Get a web page as a markdown file
 
 ```shell
@@ -64,6 +85,7 @@ $ tomd pdf -p <pdf-file> -d <directory>
 - Heading levels are inferred from font size, bold fonts and section numbering. Page boundaries use HTML comments (`<!-- Page 1 -->`), not artificial Markdown headings.
 - Positioned text is grouped into paragraphs. Wrapped lines are joined, common ligatures normalized and line-end word hyphenation removed. Two-column layouts are read column by column when a consistent gutter is detected.
 - Embedded raster images are decoded with pdfcpu and exported under `<markdown-stem>-assets/`, alongside the Markdown. Links are relative, filenames are content-hashed and repeated images share the same asset. Image positions, nested forms and supported transparency masks are retained.
+- JPEG 2000 images are preserved as original `.jpx` assets and referenced by ordinary links labeled with their format. They are not converted to PNG or sent to AI providers; with `--ia`, a warning identifies each image that cannot be described. Viewing these assets requires a JPEG 2000-compatible viewer; separate transparency masks are not combined with the original stream.
 - Image-only pages retain their image links. `ExtractTextFromPDF` remains a text-only API; the `pdf` command exports both text and images.
 - `--ia` adds clearly labeled AI-generated descriptions immediately below extracted raster images and diagrams, using the page text as context. `--language French` sets the description language; otherwise the source language is requested. The same Ollama/OpenAI configuration and in-memory cache as PPTX are used. AI failures issue warnings and retain native images and text.
 
@@ -106,6 +128,7 @@ Usage:
 
 Available Commands:
   completion  Generate the autocompletion script for the specified shell
+  docs        Convert HTML, PDF, DOCX and PPTX files in a directory to Markdown
   docx        Get Docx text content as a markdown file
   file        Get a list of web pages as markdown files
   help        Help about any command

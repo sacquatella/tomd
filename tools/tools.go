@@ -240,7 +240,12 @@ func GetImgList(content *goquery.Document, ispath string, scheme string, domain 
 
 // GetPage get a web page by it url and return a Page struct
 func GetPage(url string, customerId string, exportDir string, complements Metadata, domain string, ia bool) (Page, error) {
+	return GetPageWithSource(url, url, customerId, exportDir, complements, domain, ia)
+}
 
+// GetPageWithSource reads HTML from location and records sourceURL as its provenance.
+func GetPageWithSource(location, sourceURL, customerId, exportDir string, complements Metadata, domain string, ia bool) (Page, error) {
+	url := location
 	var grReader io.Reader
 	var err error
 	var isPath string
@@ -252,20 +257,32 @@ func GetPage(url string, customerId string, exportDir string, complements Metada
 			http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 		}
 		webpageReader, err := http.Get(url)
-		CheckError(err)
+		if err != nil {
+			return Page{}, err
+		}
 		grReader = io.Reader(webpageReader.Body)
 		defer webpageReader.Body.Close()
+		if webpageReader.StatusCode < 200 || webpageReader.StatusCode >= 300 {
+			return Page{}, fmt.Errorf("HTTP status %s for %q", webpageReader.Status, url)
+		}
 	} else {
 		webpageReader, err := os.Open(url)
 		isPath = filepath.Dir(url)
-		CheckError(err)
+		if err != nil {
+			return Page{}, err
+		}
 		grReader = io.Reader(webpageReader)
 		defer webpageReader.Close()
 	}
 
 	// Get web page content
 	doc, err := goquery.NewDocumentFromReader(grReader)
-	CheckError(err)
+	if err != nil {
+		return Page{}, err
+	}
+	if isPath != "" && strings.TrimSpace(doc.Find("title").Text()) == "" && complements.Title == "" {
+		complements.Title = strings.TrimSuffix(filepath.Base(url), filepath.Ext(url))
+	}
 	content := doc.Find("body")
 
 	if domain == "" && regexp.MustCompile(`(?i)^http`).MatchString(url) {
@@ -279,13 +296,9 @@ func GetPage(url string, customerId string, exportDir string, complements Metada
 	converter.Use(plugin.ConfluenceAttachments())
 	converter.Use(plugin.GitHubFlavored())
 	markdown := converter.Convert(content)
-	if err != nil {
-		log.Fatal(err)
-		return Page{}, err
-	}
 
 	// Add metadata header to markdown with title , doc_id,description , tags, site_url, authors, creation_date, last_update
-	metadata, metaDatas := BuildMetadata(doc, url, customerId, complements)
+	metadata, metaDatas := BuildMetadata(doc, sourceURL, customerId, complements)
 	// Add metadata header to markdown
 	markdown = metadata + markdown
 
@@ -303,7 +316,6 @@ func GetPage(url string, customerId string, exportDir string, complements Metada
 		// Get all images from web page
 		imgList, err := GetImgList(doc, isPath, scheme, domain)
 		if err != nil {
-			log.Fatal(err)
 			return Page{}, err
 		}
 		markdown = markdown + "\n" + imageDescriptionAsMd(imgList, lang)
@@ -314,7 +326,6 @@ func GetPage(url string, customerId string, exportDir string, complements Metada
 	// save markdown to file
 	err = os.WriteFile(exportedFile, []byte(markdown), 0644)
 	if err != nil {
-		log.Fatal(err)
 		return Page{}, err
 	}
 	return Page{PageId: metaDatas.Doc_id, Url: metaDatas.Site_url, MdFile: exportedFile}, nil
@@ -343,12 +354,17 @@ func ReadPages(filename string) ([]Metadata, error) {
 
 // DisplayOnScreen display pages on screen as text table
 func DisplayOnScreen(exportedPages []Page) {
+	DisplayPages(os.Stdout, exportedPages)
+}
+
+// DisplayPages writes the export results as a text table.
+func DisplayPages(w io.Writer, exportedPages []Page) {
 	table := termtables.CreateTable()
 	table.AddHeaders("Page ID", "Url", "Markdown files")
 	for _, page := range exportedPages {
 		table.AddRow(page.PageId, page.Url, page.MdFile)
 	}
-	fmt.Println(table.Render())
+	fmt.Fprintln(w, table.Render())
 }
 
 // BuildFilename build md filename clean from special characters

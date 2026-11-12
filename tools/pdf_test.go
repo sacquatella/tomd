@@ -381,6 +381,93 @@ func TestGetPDFWithOptions_AI(t *testing.T) {
 	}
 }
 
+func TestGetPDF_JPEG2000(t *testing.T) {
+	// JPX payloads are opaque to extraction: no JPEG 2000 decoder is needed.
+	jpx := []byte("\x00\x00\x00\x0cjP  \r\n\x87\nopaque JPEG 2000 payload")
+	stream := func(attributes string, data []byte) string {
+		return fmt.Sprintf("<< %s /Length %d >>\nstream\n%s\nendstream", attributes, len(data), data)
+	}
+	input := writePDFObjects(t, []string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> /XObject << /JPX 5 0 R /RGB 7 0 R >> >> /Contents 6 0 R >>",
+		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
+		stream("/Type /XObject /Subtype /Image /Width 1 /Height 1 /BitsPerComponent 8 /ColorSpace /DeviceRGB /Filter /JPXDecode", jpx),
+		stream("", []byte("BT /F1 12 Tf 72 720 Td (Native text survives JPEG 2000.) Tj ET\nq 60 0 0 60 72 600 cm /JPX Do Q\nq 60 0 0 60 72 500 cm /RGB Do Q\nq 60 0 0 60 72 400 cm /JPX Do Q")),
+		stream("/Type /XObject /Subtype /Image /Width 1 /Height 1 /BitsPerComponent 8 /ColorSpace /DeviceRGB", []byte{255, 0, 0}),
+	})
+	for _, enabled := range []bool{false, true} {
+		t.Run(fmt.Sprintf("AI=%t", enabled), func(t *testing.T) {
+			calls := 0
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				calls++
+				fmt.Fprint(w, `{"response":"Compatible image description."}`)
+			}))
+			defer server.Close()
+			var warnings []string
+			options := PDFOptions{Warn: func(message string) { warnings = append(warnings, message) }}
+			if enabled {
+				describer, err := NewImageDescriber(AIConfig{Provider: "ollama", Model: "test", BaseURL: server.URL})
+				if err != nil {
+					t.Fatal(err)
+				}
+				options.Describer = describer
+			}
+			exportDir := filepath.Join(t.TempDir(), "output with spaces")
+			if err := os.MkdirAll(exportDir, 0755); err != nil {
+				t.Fatal(err)
+			}
+			var page Page
+			var err error
+			if enabled {
+				page, err = GetPDFWithOptions(input, "", "pdf", exportDir, Metadata{}, options)
+			} else {
+				page, err = GetPDF(input, "", "pdf", exportDir, Metadata{})
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			data, err := os.ReadFile(page.MdFile)
+			if err != nil {
+				t.Fatal(err)
+			}
+			markdown := string(data)
+			if !strings.Contains(markdown, "Native text survives JPEG 2000.") || !strings.Contains(markdown, "<!-- Page 1 -->") {
+				t.Fatalf("native text missing: %s", markdown)
+			}
+			links := regexp.MustCompile(`\[Image \(JPEG 2000, original \.jpx\)\]\(([^)]+)\)`).FindAllStringSubmatch(markdown, -1)
+			if len(links) != 2 || links[0][1] != links[1][1] || strings.Count(markdown, "![Image]") != 1 || strings.Contains(markdown, "![Image (JPEG 2000") {
+				t.Fatalf("expected two deduplicated JPX links and one inline compatible image: %s", markdown)
+			}
+			link, err := url.Parse(links[0][1])
+			if err != nil || link.IsAbs() || filepath.IsAbs(link.Path) || filepath.Ext(link.Path) != ".jpx" {
+				t.Fatalf("expected relative JPX link: %q, %v", links[0][1], err)
+			}
+			asset := filepath.Join(exportDir, filepath.FromSlash(link.Path))
+			original, err := os.ReadFile(asset)
+			if err != nil || !bytes.Equal(original, jpx) {
+				t.Fatalf("original JPX bytes were not retained: %v", err)
+			}
+			entries, err := os.ReadDir(filepath.Dir(asset))
+			if err != nil || len(entries) != 2 {
+				t.Fatalf("expected one JPX and one PNG asset: %v, %v", entries, err)
+			}
+			if enabled {
+				if calls != 1 || len(warnings) != 2 || strings.Count(markdown, "Compatible image description.") != 1 {
+					t.Fatalf("unexpected AI behavior: calls=%d, warnings=%v, Markdown=%s", calls, warnings, markdown)
+				}
+				for _, warning := range warnings {
+					if !strings.Contains(warning, "page 1") || !strings.Contains(warning, "JPEG 2000") || !strings.Contains(warning, filepath.Base(asset)) {
+						t.Errorf("imprecise warning: %s", warning)
+					}
+				}
+			} else if calls != 0 || strings.Contains(markdown, "AI-generated") {
+				t.Fatal("AI was used while disabled")
+			}
+		})
+	}
+}
+
 func TestGetPDFWithOptions_Canceled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

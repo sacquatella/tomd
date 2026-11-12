@@ -433,17 +433,19 @@ func (zf *file) walk(node *Node, w io.Writer) error {
 
 // readFile
 func readFile(f *zip.File) (*Node, error) {
-	b, err := readDocxPart(f, 32<<20)
-	if err != nil {
-		return nil, err
-	}
-
 	var node Node
-	err = xml.Unmarshal(b, &node)
-	if err != nil {
+	if err := readZipXML(f, &node); err != nil {
 		return nil, err
 	}
 	return &node, nil
+}
+
+func readZipXML(f *zip.File, v any) error {
+	b, err := readDocxPart(f, 32<<20)
+	if err != nil {
+		return err
+	}
+	return xml.Unmarshal(b, v)
 }
 
 func findFile(files []*zip.File, target string) *zip.File {

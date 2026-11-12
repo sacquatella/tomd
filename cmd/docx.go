@@ -15,6 +15,8 @@
 package cmd
 
 import (
+	"fmt"
+
 	"github.com/sacquatella/tomd/docx2md"
 	"github.com/sacquatella/tomd/tools"
 	"github.com/spf13/cobra"
@@ -22,14 +24,13 @@ import (
 
 var Docx string
 var CustomerIdDocx string
-
-//var CustomerIdDocx string
+var docxLanguage string
 
 var docxCmd = &cobra.Command{
 	Use:   "docx",
-	Short: "Get Docx text content as a markdown file",
-	Long:  `Get Docx text content and generate a markdown page with metadata's'.`,
-	Run:   getDocxDocument,
+	Short: "Extract DOCX content as a Markdown file",
+	Long:  `Extract DOCX paragraphs, headings, lists, tables and images with metadata. Optional image descriptions use Ollama or OpenAI.`,
+	RunE:  getDocxDocument,
 }
 
 func init() {
@@ -37,13 +38,27 @@ func init() {
 	docxCmd.PersistentFlags().StringVarP(&Docx, "docx", "x", "", "Docx file")
 	docxCmd.PersistentFlags().StringVarP(&Url, "url", "u", "", "Page URL for metadata")
 	docxCmd.PersistentFlags().StringVarP(&CustomerIdDocx, "cid", "c", "docx", "Customer ID code ")
+	docxCmd.Flags().StringVar(&docxLanguage, "language", "", "Language for AI descriptions (default: source document language)")
+	_ = docxCmd.MarkPersistentFlagRequired("docx")
 }
 
 // getDocxDocument read docx and generate a markdown page with its metadatas
-func getDocxDocument(cmd *cobra.Command, args []string) {
-	var pages []tools.Page
-	datas, err := docx2md.GetDocx(Docx, Url, CustomerIdDocx, ExportDir, tools.Metadata{})
-	tools.CheckError(err)
-	pages = append(pages, datas)
-	tools.DisplayOnScreen(pages)
+func getDocxDocument(cmd *cobra.Command, args []string) error {
+	options := docx2md.DocxOptions{
+		Language: docxLanguage, Context: cmd.Context(),
+		Warn: func(message string) { fmt.Fprintln(cmd.ErrOrStderr(), "Warning: "+message) },
+	}
+	if ImgDesc {
+		describer, err := tools.NewImageDescriber(tools.AIConfigFromEnv())
+		if err != nil {
+			return err
+		}
+		options.Describer = describer
+	}
+	datas, err := docx2md.GetDocxWithOptions(Docx, Url, CustomerIdDocx, ExportDir, tools.Metadata{}, options)
+	if err != nil {
+		return err
+	}
+	tools.DisplayOnScreen([]tools.Page{datas})
+	return nil
 }

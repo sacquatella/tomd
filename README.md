@@ -9,7 +9,7 @@ Simple golang cli to convert various documents to markdown format. It first vers
 
 ![AI-Assisted](https://img.shields.io/badge/Development-Human%20%2B%20AI-blue)
 
-The CLI can convert a single file or a list of files. HTML, PDF and PPTX image descriptions can optionally use [Ollama](https://ollama.com) or OpenAI. All local processing is Go: no LibreOffice, Python or external executable is needed.
+The CLI can convert a single file or a list of files. HTML, PDF, DOCX and PPTX image descriptions can optionally use [Ollama](https://ollama.com) or OpenAI. All local processing is Go: no LibreOffice, Python or external executable is needed.
 
 The conversion generates metadata header with the following fields :
 
@@ -120,10 +120,23 @@ tomd pdf -p document.pdf -d output --ia --language French
 
 Limitations: PDF structure is inferred, not guaranteed. Unusual fonts, tables, multi-column layouts and overlapping text may require manual correction. Vector drawings, clipping, inline images and arbitrary page rotations are not rendered; unsupported image encodings may not be extracted or described. There is no OCR, so scanned text remains inside the exported image; AI descriptions are separate generated content, not a replacement for source text.
 
-Extract DOCX text as markdown file (basic text extraction)
+Extract DOCX content as a Markdown file
 ```shell
-$ tomd docx -d <docx-file> -d <directory>
+$ tomd docx -x document.docx -d output
 ```
+
+### DOCX Export
+
+- Paragraphs, heading styles (including inherited styles and outline levels 1–6), bold/italic/strikethrough text, links, nested lists and tables are converted to Markdown. XML entities are decoded; line breaks and multiline table cells are preserved. Deleted revisions and field instructions are omitted; inserted text is retained.
+- Embedded images, including legacy VML images and image-based diagrams, are exported under `<markdown-stem>-assets/` alongside the Markdown. Links are relative, filenames are content-hashed, and repeated images share the same asset. Source alternative text is preserved. External images are never fetched.
+- `--ai` adds clearly labeled AI-generated descriptions below supported raster images, using neighboring text and alternative text as context. `--language French` selects the description language; by default the source language is requested. `--ia` and `-i` remain supported aliases.
+- AI failures issue warnings without removing source images or text. Native conversion requires no AI service. Library callers can use `GetDocxWithOptions` or `Docx2mdWithOptions` with the shared `ImageDescriber`; existing `GetDocx` and `Docx2md` APIs remain AI-free.
+
+```shell
+tomd docx -x document.docx -d output --ai --language French
+```
+
+Limitations: DOCX conversion is not a Word renderer. Complex merged tables, advanced numbering, headers/footers, footnotes, embedded objects and page layout are not fully reproduced. Native SmartArt/charts/vector diagrams are not rendered as images for AI analysis; embedded raster previews can be described when present. SVG/EMF/WMF and other unsupported vision formats remain exported but are not rasterized or sent to the model. Supported vision formats are PNG/JPEG/GIF/WebP. AI descriptions may be inaccurate and are not source facts.
 
 Extract PPTX content as RAG-ready Markdown
 ```shell
@@ -163,6 +176,7 @@ Available Commands:
   version     Provide tomd version and build number
 
 Flags:
+      --ai           Use AI for image description (alias of --ia)
   -d, --dir string   Export page(s) folder, default is current folder (default ".")
   -h, --help         help for tomd
   -i, --ia           Use IA for image description
@@ -171,9 +185,9 @@ Flags:
 Use "tomd [command] --help" for more information about a command.
 ```
 
-### Optional AI providers (HTML, PDF and PPTX)
+### Optional AI providers (HTML, PDF, DOCX and PPTX)
 
-No AI request is made without `--ia`. Ollama remains the default provider, with `llava:7b` as its default model. The Ollama service must be reachable and have the selected model installed; it is not required for native extraction.
+No AI request is made without `--ai` (or `--ia` / `-i`). Ollama remains the default provider, with `llava:7b` as its default model. The Ollama service must be reachable and have the selected model installed; it is not required for native extraction.
 
 ```shell
 TOMD_AI_PROVIDER=ollama TOMD_MODEL=llama3.2-vision:latest \
@@ -191,7 +205,7 @@ tomd pptx -s presentation.pptx -d output --ia --language French
 
 `OLLAMA_HOST` overrides the Ollama endpoint (default `http://127.0.0.1:11434`). `OPENAI_BASE_URL` overrides the OpenAI API base (default `https://api.openai.com/v1`); the client uses `/chat/completions`. Credentials are not sent to Ollama, included in Markdown or logged. Provider error bodies are not logged. Enabling OpenAI uploads image content and surrounding source context to that service and may incur charges; use Ollama for local-only descriptions. No automatic fallback between providers occurs.
 
-Tests run offline with synthetic PPTX archives and simulated HTTP providers: `go test ./...`.
+Tests run offline with synthetic DOCX/PPTX archives and simulated HTTP providers: `go test ./...`.
 
 ## Build
 

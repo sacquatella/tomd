@@ -3,22 +3,15 @@ package docx2md
 import (
 	"archive/zip"
 	"bytes"
-	"encoding/base64"
 	"encoding/xml"
-	"errors"
 	"fmt"
 	"io"
-	"io/fs"
-	"net/url"
-	"os"
 	"path"
-	"path/filepath"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/mattn/go-runewidth"
-	log "github.com/sirupsen/logrus"
-
 	"github.com/sacquatella/tomd/tools"
 )
 
@@ -40,49 +33,6 @@ func escape(s, set string) string {
 	return strings.NewReplacer(replacer...).Replace(s)
 }
 
-// extract img and générate markdown image tag with it decription
-func (zf *file) extract(rel *Relationship, w io.Writer, desc string) error {
-
-	description := strings.ReplaceAll(desc, "\n", "")
-	if strings.EqualFold(rel.TargetMode, "External") || !fs.ValidPath(rel.Target) ||
-		strings.ContainsAny(rel.Target, `\:`) {
-		return fmt.Errorf("unsafe image relationship target %q", rel.Target)
-	}
-	for _, f := range zf.r.File {
-		if f.Name != "word/"+rel.Target {
-			continue
-		}
-		rc, err := f.Open()
-		if err != nil {
-			return err
-		}
-		defer rc.Close()
-
-		b, err := io.ReadAll(rc)
-		if err != nil {
-			return err
-		}
-		if zf.embed {
-			fmt.Fprintf(w, "![%s](data:image/png;base64,%s)",
-				description, base64.StdEncoding.EncodeToString(b))
-		} else {
-			target := filepath.Join(zf.assetDir, filepath.FromSlash(rel.Target))
-			output := filepath.Join(zf.outputDir, target)
-			if err := os.MkdirAll(filepath.Dir(output), 0755); err != nil {
-				return err
-			}
-			err = os.WriteFile(output, b, 0644)
-			if err != nil {
-				return err
-			}
-			link := (&url.URL{Path: filepath.ToSlash(target)}).EscapedPath()
-			fmt.Fprintf(w, "![%s](%s)", description, escape(link, "()"))
-		}
-		break
-	}
-	return nil
-}
-
 // attr returns the value of the attribute with the given name.
 func attr(attrs []xml.Attr, name string) (string, bool) {
 	for _, attr := range attrs {
@@ -95,59 +45,86 @@ func attr(attrs []xml.Attr, name string) (string, bool) {
 
 // walk traverses the XML tree and writes the content to the writer.
 func (zf *file) walk(node *Node, w io.Writer) error {
+	if zf.opts.Context != nil {
+		if err := zf.opts.Context.Err(); err != nil {
+			return err
+		}
+	}
 	switch node.XMLName.Local {
+	case "body":
+		for i := range node.Nodes {
+			if i > 0 && child(child(&node.Nodes[i-1], "pPr"), "numPr") != nil && child(child(&node.Nodes[i], "pPr"), "numPr") == nil {
+				fmt.Fprintln(w)
+			}
+			var contextParts []string
+			for j := max(0, i-1); j <= min(len(node.Nodes)-1, i+1); j++ {
+				contextParts = append(contextParts, docxContext(&node.Nodes[j]))
+			}
+			contextRunes := []rune(strings.Join(contextParts, "\n"))
+			zf.contextText = string(contextRunes[:min(6000, len(contextRunes))])
+			if err := zf.walk(&node.Nodes[i], w); err != nil {
+				return err
+			}
+		}
+		zf.contextText = ""
 	case "hyperlink":
-		// Traitement des hyperliens
-		fmt.Fprint(w, "[")
 		var cbuf bytes.Buffer
 		for _, n := range node.Nodes {
 			if err := zf.walk(&n, &cbuf); err != nil {
 				return err
 			}
 		}
-		fmt.Fprint(w, escape(cbuf.String(), "[]"))
-		fmt.Fprint(w, "]")
-
-		fmt.Fprint(w, "(")
+		target := ""
 		if id, ok := attr(node.Attrs, "id"); ok {
 			for _, rel := range zf.rels.Relationship {
 				if id == rel.ID {
-					fmt.Fprint(w, escape(rel.Target, "()"))
+					target = rel.Target
 					break
 				}
 			}
 		}
-		fmt.Fprint(w, ")")
+		if anchor := nodeAttr(node, "anchor"); anchor != "" {
+			target = "#" + anchor
+		}
+		if target == "" {
+			fmt.Fprint(w, cbuf.String())
+		} else {
+			fmt.Fprintf(w, "[%s](%s)", cbuf.String(), escape(target, "() "))
+		}
 	case "t":
-		// Traitement du texte
-		fmt.Fprint(w, string(node.Content))
+		fmt.Fprint(w, inlineMD(xmlText(node)))
+	case "tab":
+		fmt.Fprint(w, "\t")
+	case "br", "cr":
+		fmt.Fprint(w, "  \n")
+	case "del", "instrText", "delText":
+		// Deleted revisions and field instructions are not visible source text.
 	case "pPr":
 		// Traitement des propriétés de paragraphe
-		code := false
+		level := zf.headingLevel(nodeAttr(child(node, "pStyle"), "val"))
+		if outline := child(node, "outlineLvl"); outline != nil {
+			level = 0
+			if value, err := strconv.Atoi(nodeAttr(outline, "val")); err == nil && value >= 0 && value <= 5 {
+				level = value + 1
+			}
+		}
+		if level > 0 {
+			fmt.Fprint(w, strings.Repeat("#", level)+" ")
+		}
 		for _, n := range node.Nodes {
 			switch n.XMLName.Local {
 			case "ind":
+				if child(node, "numPr") != nil {
+					continue
+				}
 				if left, ok := attr(n.Attrs, "left"); ok {
 					if i, err := strconv.Atoi(left); err == nil && i > 0 {
-						fmt.Fprint(w, strings.Repeat("  ", i/360))
-					}
-				}
-			case "pStyle":
-				if val, ok := attr(n.Attrs, "val"); ok {
-					log.Infof("Style found: %s\n", val) // Debug
-					if strings.HasPrefix(val, "Heading") {
-						if i, err := strconv.Atoi(val[7:]); err == nil && i > 0 {
-							fmt.Fprint(w, strings.Repeat("#", i)+" ")
-						}
-					} else if level, found := customHeadings[val]; found {
-						fmt.Fprint(w, strings.Repeat("#", level)+" ")
-					} else {
-						log.Infof("Unrecognized style: %s\n", val)
+						fmt.Fprint(w, strings.Repeat("  ", min(i/360, 10)))
 					}
 				}
 			case "numPr":
 				numID := ""
-				ilvl := ""
+				ilvl := "0"
 				numFmt := ""
 				start := 1
 				ind := 0
@@ -189,10 +166,23 @@ func (zf *file) walk(node *Node, w io.Writer) error {
 					break
 				}
 
-				fmt.Fprint(w, strings.Repeat("  ", ind))
+				if level, err := strconv.Atoi(ilvl); err == nil && level >= 0 && level < 10 {
+					ind = level
+				}
+				fmt.Fprint(w, strings.Repeat("  ", min(max(ind, 0), 10)))
+				// A new parent item restarts its deeper list levels.
+				level, _ := strconv.Atoi(ilvl)
+				for key := range zf.list {
+					if strings.HasPrefix(key, numID+":") {
+						deeper, _ := strconv.Atoi(strings.TrimPrefix(key, numID+":"))
+						if deeper > level {
+							delete(zf.list, key)
+						}
+					}
+				}
 				switch numFmt {
 				case "decimal", "aiueoFullWidth":
-					key := fmt.Sprintf("%s:%d", numID, ind)
+					key := numID + ":" + ilvl
 					cur, ok := zf.list[key]
 					if !ok {
 						zf.list[key] = start
@@ -204,17 +194,6 @@ func (zf *file) walk(node *Node, w io.Writer) error {
 					fmt.Fprint(w, "* ")
 				}
 			}
-		}
-		if code {
-			fmt.Fprint(w, "`")
-		}
-		for _, n := range node.Nodes {
-			if err := zf.walk(&n, w); err != nil {
-				return err
-			}
-		}
-		if code {
-			fmt.Fprint(w, "`")
 		}
 	case "tbl":
 		// Traitement des tableaux
@@ -233,7 +212,7 @@ func (zf *file) walk(node *Node, w io.Writer) error {
 				if err := zf.walk(&tc, &cbuf); err != nil {
 					return err
 				}
-				content := strings.TrimSpace(cbuf.String())
+				content := docxTableCell(cbuf.String())
 
 				// Vérifiez si cette cellule appartient à une ligne d'entête
 				for _, tcPr := range tc.Nodes {
@@ -262,6 +241,9 @@ func (zf *file) walk(node *Node, w io.Writer) error {
 			}
 		}
 		widths := make([]int, maxcol)
+		for i := range widths {
+			widths[i] = 3
+		}
 		for _, row := range rows {
 			for i := 0; i < maxcol; i++ {
 				if i < len(row) {
@@ -279,7 +261,7 @@ func (zf *file) walk(node *Node, w io.Writer) error {
 					fmt.Fprint(w, "|")
 					if j < len(row) {
 						width := runewidth.StringWidth(row[j])
-						fmt.Fprint(w, escape(row[j], "|"))
+						fmt.Fprint(w, row[j])
 						fmt.Fprint(w, strings.Repeat(" ", widths[j]-width))
 					} else {
 						fmt.Fprint(w, strings.Repeat(" ", widths[j]))
@@ -299,7 +281,7 @@ func (zf *file) walk(node *Node, w io.Writer) error {
 					fmt.Fprint(w, "|")
 					if j < len(row) {
 						width := runewidth.StringWidth(row[j])
-						fmt.Fprint(w, escape(row[j], "|"))
+						fmt.Fprint(w, row[j])
 						fmt.Fprint(w, strings.Repeat(" ", widths[j]-width))
 					} else {
 						fmt.Fprint(w, strings.Repeat(" ", widths[j]))
@@ -335,112 +317,109 @@ func (zf *file) walk(node *Node, w io.Writer) error {
 			for _, nn := range n.Nodes {
 				switch nn.XMLName.Local {
 				case "b":
-					bold = true
+					bold = docxOn(&nn)
 				case "i":
-					italic = true
+					italic = docxOn(&nn)
 				case "strike":
-					strike = true
+					strike = docxOn(&nn)
 				case "hlinkClick":
 					link = true
 					RelationId, _ = attr(nn.Attrs, "id")
 				}
 			}
 		}
-		if strike {
-			fmt.Fprint(w, "~~")
+		if first(node, "drawing") != nil || first(node, "pict") != nil {
+			bold, italic, strike = false, false, false
 		}
-		if bold {
-			fmt.Fprint(w, "**")
-		}
-		if italic {
-			fmt.Fprint(w, "*")
-		}
-		if link {
-			fmt.Fprint(w, "[")
-		}
-		for _, n := range node.Nodes {
-			var cbuf bytes.Buffer
-			if err := zf.walk(&n, &cbuf); err != nil {
-				return err
-			}
-			if n.XMLName.Local == "drawing" || n.XMLName.Local == "pic" {
-				// Image Markdown must not be escaped as literal run text.
-				fmt.Fprint(w, cbuf.String())
-			} else {
-				fmt.Fprint(w, escape(cbuf.String(), `*~[\`))
-			}
-		}
-		if italic {
-			fmt.Fprint(w, "*")
-		}
-		if bold {
-			fmt.Fprint(w, "**")
-		}
-		if strike {
-			fmt.Fprint(w, "~~")
-		}
-		if link {
-			fmt.Fprint(w, "](")
-			for _, rel := range zf.rels.Relationship {
-				if RelationId == rel.ID {
-					fmt.Fprint(w, escape(rel.Target, "()"))
-					break
-				}
-			}
-			fmt.Fprint(w, ")")
-		}
-	case "p":
-		// Traitement des paragraphes
-		for _, n := range node.Nodes {
-			if err := zf.walk(&n, w); err != nil {
-				return err
-			}
-		}
-		fmt.Fprintln(w)
-	case "pic":
-		// manage images get image and description
-		var imageDesc string
-		for _, n := range node.Nodes {
-			if n.XMLName.Local != "blipFill" && n.XMLName.Local != "nvPicPr" {
-				continue
-			}
-			// loop arround subnode
-			for _, nn := range n.Nodes {
-				//var imageTitle, imageDesc string
-				// get description
-				if nn.XMLName.Local == "cNvPr" {
-					//imageTitle, _ = attr(n.Attrs, "title")
-					imageDesc, _ = attr(nn.Attrs, "descr")
-				}
-				// get image
-				if nn.XMLName.Local == "blip" {
-					if id, ok := attr(nn.Attrs, "embed"); ok {
-						for _, rel := range zf.rels.Relationship {
-							if id != rel.ID {
-								continue
-							}
-							log.Infof("Blip Image found target is: %s", rel.Target) // Debug
-							log.Infof("Blip Image found text %+v", rel)             // Debug
-							if err := zf.extract(&rel, w, imageDesc); err != nil {
-								return err
-							}
-						}
-					}
-				}
-			}
-
-		}
-	case "Fallback":
-		// Traitement des fallback
-	case "txbxContent":
-		// Traitement du contenu des boîtes de texte
 		var cbuf bytes.Buffer
 		for _, n := range node.Nodes {
 			if err := zf.walk(&n, &cbuf); err != nil {
 				return err
 			}
 		}
-		fmt.Fprintln(w, "\n```\n"+cbuf.String()+"```")
+		text := cbuf.String()
+		if bold || italic || strike {
+			trimmed := strings.TrimSpace(text)
+			if trimmed != "" {
+				left := text[:len(text)-len(strings.TrimLeftFunc(text, unicode.IsSpace))]
+				right := text[len(strings.TrimRightFunc(text, unicode.IsSpace)):]
+				if italic {
+					trimmed = "*" + trimmed + "*"
+				}
+				if bold {
+					trimmed = "**" + trimmed + "**"
+				}
+				if strike {
+					trimmed = "~~" + trimmed + "~~"
+				}
+				text = left + trimmed + right
+			}
+		}
+		if link {
+			for _, rel := range zf.rels.Relationship {
+				if RelationId == rel.ID {
+					text = "[" + text + "](" + escape(rel.Target, "() ") + ")"
+					break
+				}
+			}
+		}
+		fmt.Fprint(w, text)
+	case "p":
+		style := strings.ToLower(tools.RemoveAccents(nodeAttr(child(child(node, "pPr"), "pStyle"), "val")))
+		if strings.Contains(style, "preformat") || strings.Contains(style, "prformat") || style == "code" || style == "sourcecode" || style == "codeblock" {
+			// Do not escape Markdown characters inside preformatted source code.
+			for _, line := range strings.Split(strings.TrimSuffix(docxContext(node), "\n"), "\n") {
+				fmt.Fprintln(w, "    "+line)
+			}
+			fmt.Fprintln(w)
+			return nil
+		}
+		previousContext := zf.contextText
+		if zf.contextText == "" {
+			zf.contextText = docxContext(node)
+		}
+		var paragraph bytes.Buffer
+		for _, n := range node.Nodes {
+			if err := zf.walk(&n, &paragraph); err != nil {
+				return err
+			}
+		}
+		zf.contextText = previousContext
+		if strings.TrimSpace(paragraph.String()) == "" {
+			return nil
+		}
+		fmt.Fprint(w, paragraph.String())
+		fmt.Fprintln(w)
+		if first(child(node, "pPr"), "numPr") == nil {
+			fmt.Fprintln(w)
+		}
+	case "drawing", "pict":
+		return zf.drawing(node, w)
+	case "pic":
+		return zf.drawing(node, w)
+	case "Fallback":
+		// Traitement des fallback
+	case "AlternateContent":
+		branch := child(node, "Choice")
+		if branch == nil || (first(branch, "blip") == nil && first(branch, "txbxContent") == nil) {
+			branch = child(node, "Fallback")
+		}
+		if branch != nil {
+			for i := range branch.Nodes {
+				if err := zf.walk(&branch.Nodes[i], w); err != nil {
+					return err
+				}
+			}
+		}
+	case "txbxContent":
+		// Text boxes retain native Markdown rather than becoming code blocks.
+		var cbuf bytes.Buffer
+		for _, n := range node.Nodes {
+			if err := zf.walk(&n, &cbuf); err != nil {
+				return err
+			}
+		}
+		fmt.Fprint(w, "\n\n"+cbuf.String())
 	default:
 		for _, n := range node.Nodes {
 			if err := zf.walk(&n, w); err != nil {
@@ -462,13 +441,7 @@ func readFile(f *zip.File) (*Node, error) {
 }
 
 func readZipXML(f *zip.File, v any) error {
-	rc, err := f.Open()
-	if err != nil {
-		return err
-	}
-	defer rc.Close()
-
-	b, err := io.ReadAll(rc)
+	b, err := readDocxPart(f, 32<<20)
 	if err != nil {
 		return err
 	}
@@ -486,93 +459,12 @@ func findFile(files []*zip.File, target string) *zip.File {
 
 // Docx2md return a markdown string from a docx file
 func Docx2md(arg string, embed bool) (string, tools.Metadata, error) {
-	return docx2md(arg, embed, ".", "")
-}
-
-func docx2md(arg string, embed bool, outputDir, assetDir string) (string, tools.Metadata, error) {
-	r, err := zip.OpenReader(arg)
-	if err != nil {
-		return "", tools.Metadata{}, err
-	}
-	defer r.Close()
-
-	var rels Relationships
-	var num Numbering
-	var prop CoreProperties
-
-	for _, f := range r.File {
-		switch f.Name {
-		case "word/_rels/document.xml.rels", "word/_rels/document2.xml.rels":
-			if err := readZipXML(f, &rels); err != nil {
-				return "", tools.Metadata{}, err
-			}
-		case "word/numbering.xml":
-			if err := readZipXML(f, &num); err != nil {
-				return "", tools.Metadata{}, err
-			}
-		case "docProps/core.xml":
-			if err := readZipXML(f, &prop); err != nil {
-				return "", tools.Metadata{}, err
-			}
-
-		}
-	}
-
-	f := findFile(r.File, "word/document*.xml")
-	if f == nil {
-		return "", tools.Metadata{}, errors.New("incorrect document")
-	}
-	node, err := readFile(f)
-	if err != nil {
-		return "", tools.Metadata{}, err
-	}
-
-	var buf bytes.Buffer
-	zf := &file{
-		r:         r,
-		rels:      rels,
-		num:       num,
-		embed:     embed,
-		list:      make(map[string]int),
-		outputDir: outputDir,
-		assetDir:  assetDir,
-	}
-	err = zf.walk(node, &buf)
-	if err != nil {
-		return "", tools.Metadata{}, err
-	}
-	//fmt.Print(buf.String())
-	log.Infof("Properties Title : %s\n", prop.Title)
-	var authors []string
-
-	meta := tools.Metadata{Title: prop.Title, Description: prop.Description, Authors: append(authors, prop.Creator)}
-
-	return buf.String(), meta, nil
+	return Docx2mdWithOptions(arg, DocxOptions{EmbedImages: embed})
 }
 
 // GetDocx convert a docx file to markdown and add metadata header
 func GetDocx(docxPath string, url string, customerId string, exportDir string, complements tools.Metadata) (tools.Page, error) {
-
-	stem := strings.TrimSuffix(filepath.Base(docxPath), filepath.Ext(docxPath))
-	markdown, meta, err := docx2md(docxPath, false, exportDir, stem+"-assets")
-	if err != nil {
-		return tools.Page{}, err
-	}
-
-	// Add metadata header to markdown with title , doc_id,description , tags, site_url, authors, creation_date, last_update
-	metadata, metaDatas := tools.BuildFileMetadata(docxPath, url, customerId, meta, complements)
-
-	// Add metadata header to markdown
-	markdown = metadata + markdown
-
-	exportedFile := tools.BuildFilename(metaDatas.Title, exportDir, customerId)
-	// Écrire le Markdown dans un fichier
-	err = tools.WriteMarkdownToFile(markdown, exportedFile)
-	if err != nil {
-		return tools.Page{}, err
-	}
-
-	return tools.Page{PageId: metaDatas.Doc_id, Url: metaDatas.Site_url, MdFile: exportedFile}, nil
+	return GetDocxWithOptions(docxPath, url, customerId, exportDir, complements, DocxOptions{})
 }
 
 // GetPptx convert a pptx file to markdown and add metadata header

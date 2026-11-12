@@ -30,8 +30,8 @@ func TestEscape(t *testing.T) {
 func TestDocxToMd_ValidDocx(t *testing.T) {
 
 	docxfile := "../samples/test.docx"
-	expectedMarkdown := "Titre One\nExemple de texte en HTML \n## Titre Two\nAutre exemple de texte en HTML"
-	embed := false
+	expectedMarkdown := "# Titre One\n\nExemple de texte en HTML \n\n## Titre Two\n\nAutre exemple de texte en HTML"
+	embed := true
 
 	result, _, err := Docx2md(docxfile, embed)
 	if err != nil {

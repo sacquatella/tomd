@@ -291,11 +291,7 @@ func GetPageWithSource(location, sourceURL, customerId, exportDir string, comple
 
 	//fmt.Printf("ID: %s\n", content.ID)
 
-	converter := md.NewConverter(domain, true, nil)
-	converter.Use(plugin.ConfluenceCodeBlock())
-	converter.Use(plugin.ConfluenceAttachments())
-	converter.Use(plugin.GitHubFlavored())
-	markdown := converter.Convert(content)
+	markdown := convertHTMLToMarkdown(content, domain)
 
 	// Add metadata header to markdown with title , doc_id,description , tags, site_url, authors, creation_date, last_update
 	metadata, metaDatas := BuildMetadata(doc, sourceURL, customerId, complements)
@@ -311,14 +307,20 @@ func GetPageWithSource(location, sourceURL, customerId, exportDir string, comple
 
 	log.Infof("Language detected: %s at %f for %s", lang, infol.Confidence, url)
 
-	// If imgDesc is not empty, add image description to markdown
+	// Use AI-generated descriptions as the images' Markdown alt text.
 	if ia {
 		// Get all images from web page
 		imgList, err := GetImgList(doc, isPath, scheme, domain)
 		if err != nil {
 			return Page{}, err
 		}
-		markdown = markdown + "\n" + imageDescriptionAsMd(imgList, lang)
+		descriptions := imageDescriptions(imgList, lang)
+		content.Find("img").Each(func(i int, image *goquery.Selection) {
+			if i < len(descriptions) && descriptions[i] != "" {
+				image.SetAttr("alt", descriptions[i])
+			}
+		})
+		markdown = metadata + convertHTMLToMarkdown(content, domain)
 	}
 
 	exportedFile := BuildFilename(metaDatas.Title, exportDir, customerId)
@@ -329,6 +331,14 @@ func GetPageWithSource(location, sourceURL, customerId, exportDir string, comple
 		return Page{}, err
 	}
 	return Page{PageId: metaDatas.Doc_id, Url: metaDatas.Site_url, MdFile: exportedFile}, nil
+}
+
+func convertHTMLToMarkdown(content *goquery.Selection, domain string) string {
+	converter := md.NewConverter(domain, true, nil)
+	converter.Use(plugin.ConfluenceCodeBlock())
+	converter.Use(plugin.ConfluenceAttachments())
+	converter.Use(plugin.GitHubFlavored())
+	return converter.Convert(content)
 }
 
 // ReadPages read pages list from json file and return a list of Metadata

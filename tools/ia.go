@@ -268,20 +268,21 @@ func describeImageSource(ctx context.Context, d ImageDescriber, img, lang string
 	return d.Describe(ctx, data, http.DetectContentType(data), lang, "")
 }
 
-func imageDescriptionAsMd(imgList []string, lang string) string {
+func imageDescriptions(imgList []string, lang string) []string {
+	images := make([]string, len(imgList))
 	d, err := NewImageDescriber(AIConfigFromEnv())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: image descriptions disabled: %v\n", err)
-		return ""
+		return images
 	}
-	var markdown strings.Builder
-	for _, img := range imgList {
+	for i, img := range imgList {
 		description, err := describeImageSource(context.Background(), d, img, lang)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: image description unavailable: %v\n", err)
 			continue
 		}
-		fmt.Fprintf(&markdown, "\n### Image description (AI-generated)\n\nSource: %s\n\n%s\n", img, description)
+		// Markdown image alt text must stay on one line.
+		images[i] = strings.Join(strings.Fields(description), " ")
 	}
-	return markdown.String()
+	return images
 }

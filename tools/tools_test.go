@@ -1,6 +1,10 @@
 package tools
 
 import (
+	"bytes"
+	"image"
+	"image/color"
+	"image/png"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -81,6 +85,52 @@ func TestGetPageWithSource(t *testing.T) {
 		!strings.Contains(string(data), "title: local-page\n") || !strings.Contains(string(data), "# Remote content") ||
 		strings.Contains(string(data), filepath.Dir(input)) {
 		t.Fatalf("local input or remote provenance was not preserved: page=%+v, Markdown=%s", page, data)
+	}
+}
+
+func TestGetPageAIUsesImageDescriptionAsAltText(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/generate" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"response":"A red square\nwith a blue border."}`))
+	}))
+	defer server.Close()
+	t.Setenv("TOMD_AI_PROVIDER", "ollama")
+	t.Setenv("TOMD_MODEL", "test-vision")
+	t.Setenv("OLLAMA_HOST", server.URL)
+
+	dir := t.TempDir()
+	bitmap := image.NewRGBA(image.Rect(0, 0, 2, 2))
+	bitmap.Set(0, 0, color.RGBA{R: 255, A: 255})
+	var imageData bytes.Buffer
+	if err := png.Encode(&imageData, bitmap); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "square.png"), imageData.Bytes(), 0600); err != nil {
+		t.Fatal(err)
+	}
+	input := filepath.Join(dir, "page.html")
+	if err := os.WriteFile(input, []byte(`<html><head><title>Image page</title></head><body><p>Example</p><img src="square.png" alt="Original alt"></body></html>`), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	page, err := GetPage(input, "docs", dir, Metadata{}, "", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(page.MdFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	markdown := string(data)
+	if !strings.Contains(markdown, "![A red square with a blue border.](square.png)") {
+		t.Fatalf("AI description was not used as image alt text: %s", markdown)
+	}
+	if strings.Contains(markdown, "Original alt") || strings.Contains(markdown, "Image description (AI-generated)") {
+		t.Fatalf("unexpected old alt text or separate description section: %s", markdown)
 	}
 }
 
